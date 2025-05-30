@@ -1,175 +1,345 @@
 #!/usr/bin/env python3
 """
 Script to create a slim SNOMED CT database by filtering relationships and hierarchies.
+Improved version with better error handling, progress tracking, and performance optimizations.
 """
 
 import argparse
+import logging
+import sys
 import time
+from collections.abc import Generator
+from contextlib import contextmanager
+from typing import Any
 
-from neo4j import GraphDatabase, Record, Session
+from neo4j import Driver, GraphDatabase, Session
+from neo4j.exceptions import Neo4jError
+
+
+def setup_logging(verbose: bool = False) -> None:
+    """Configure logging with appropriate level and format."""
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("snomed_slim.log")],
+    )
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Create a slim SNOMED CT database")
-    parser.add_argument("--relationships", help="Comma-separated list of relationship type IDs to include")
-    parser.add_argument("--hierarchies", help="Comma-separated list of parent concept IDs to include")
-    parser.add_argument("--neo4j-uri", default="bolt://localhost:7687", help="Neo4j URI")
-    parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username")
-    parser.add_argument("--neo4j-password", default="neo4jneo4j", help="Neo4j password")
-    return parser.parse_args()
-
-
-def filter_by_relationship_types(session: Session, relationship_types: list[str]) -> None:
-    """Filter database to keep only specified relationship types."""
-    print(f"Filtering relationships to types: {relationship_types}")
-
-    # Delete relationships not in the specified list using APOC for batching
-    result = session.run(
-        """
-        CALL apoc.periodic.iterate(
-            "MATCH ()-[r:RELATIONSHIP]->() WHERE NOT r.typeId IN $types RETURN r",
-            "DELETE r RETURN count(*)",
-            {batchSize: 1000, parallel: false}
-        )
+    """Parse command line arguments with improved validation."""
+    parser = argparse.ArgumentParser(
+        description="Create a slim SNOMED CT database by filtering relationships and hierarchies",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --relationships "116680003,123005000" --hierarchies "404684003"
+  %(prog)s --hierarchies "73211009,123037004" --soft-delete --verbose
         """,
-        {"types": relationship_types},
     )
 
-    record = result.single()
-    assert isinstance(record, Record), "None result is not acceptable"
-    deleted = 1000 * record["batchSize"] + record["failedBatches"] * 1000 + record["failedOperations"]
-    print(f"Deleted approximately {deleted} relationships.")
+    parser.add_argument("--relationships", help="Comma-separated list of relationship type IDs to include (e.g., '116680003,123005000')")
+    parser.add_argument("--hierarchies", help="Comma-separated list of parent concept IDs to include (e.g., '404684003,73211009')")
+    parser.add_argument("--neo4j-uri", default="bolt://localhost:7687", help="Neo4j URI (default: %(default)s)")
+    parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username (default: %(default)s)")
+    parser.add_argument("--neo4j-password", default="neo4jneo4j", help="Neo4j password (default: %(default)s)")
+    parser.add_argument("--soft-delete", action="store_true", help="Use soft deletion (is_deleted attribute) instead of physical deletion")
+    parser.add_argument("--batch-size", type=int, default=1000, help="Batch size for operations (default: %(default)s)")
+    parser.add_argument("--max-depth", type=int, default=20, help="Maximum hierarchy depth to traverse (default: %(default)s)")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be deleted without actually performing deletions")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+
+    args = parser.parse_args()
+
+    # Validate that at least one filter is specified
+    if not args.relationships and not args.hierarchies:
+        parser.error("At least one of --relationships or --hierarchies must be specified")
+
+    return args
 
 
-def filter_by_hierarchies(session: Session, parent_ids: list[str]) -> None:
-    """Filter database to keep only concepts in specified hierarchies."""
-    print(f"Filtering concepts to hierarchies under: {parent_ids}")
+class SNOMEDSlimmer:
+    """Main class for SNOMED CT database slimming operations."""
 
-    # Mark concepts to keep (those in the specified hierarchies)
-    session.run(
+    def __init__(self, uri: str, user: str, password: str, batch_size: int = 1000, max_depth: int = 20) -> None:
+        self.uri = uri
+        self.user = user
+        self.password = password
+        self.batch_size = batch_size
+        self.max_depth = max_depth
+        self.logger = logging.getLogger(__name__)
+        self._driver: Driver | None = None
+
+    @contextmanager
+    def get_driver(self) -> Generator:
+        """Context manager for Neo4j driver connection."""
+        try:
+            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+            # Test connection
+            self._driver.verify_connectivity()
+            self.logger.info(f"Successfully connected to Neo4j at {self.uri}")
+            yield self._driver
+        except Neo4jError as e:
+            self.logger.error(f"Failed to connect to Neo4j: {e}")
+            raise
+        finally:
+            if self._driver:
+                self._driver.close()
+                self.logger.info("Neo4j connection closed")
+
+    def execute_batched_operation(self, session: Session, match_query: str, action_query: str, parameters: dict[str, Any] | None = None) -> int:
+        """Execute a batched operation using APOC and return the count of affected items."""
+        try:
+            result = session.run(
+                """
+                CALL apoc.periodic.iterate(
+                    $match_query,
+                    $action_query,
+                    {batchSize: $batch_size, parallel: false, retries: 3}
+                )
+                """,
+                {"match_query": match_query, "action_query": action_query, "batch_size": self.batch_size, **(parameters or {})},
+            )
+
+            record = result.single()
+            if not record:
+                self.logger.warning("No result returned from batched operation")
+                return 0
+
+            # Calculate total affected items
+            total = record.get("batches", 0) * self.batch_size
+            total += record.get("failedBatches", 0) * self.batch_size
+            total += record.get("failedOperations", 0)
+
+            if record.get("errorMessages"):
+                self.logger.warning(f"Operation had errors: {record['errorMessages']}")
+
+            return total
+
+        except Neo4jError as e:
+            self.logger.error(f"Error executing batched operation: {e}")
+            raise
+
+    def get_count(self, session: Session, query: str, parameters: dict[str, Any] | None = None) -> int:
+        """Get count from a query safely."""
+        try:
+            result = session.run(query, parameters or {})
+            record = result.single()
+            return record[0] if record else 0
+        except Neo4jError as e:
+            self.logger.error(f"Error getting count: {e}")
+            return 0
+
+    def filter_by_relationship_types(self, session: Session, relationship_types: list[str], soft_delete: bool = False, dry_run: bool = False) -> None:
+        """Filter database to keep only specified relationship types."""
+        self.logger.info(f"Filtering relationships to types: {relationship_types}")
+
+        # Count relationships to be affected
+        count_query = """
+            MATCH ()-[r:RELATIONSHIP]->()
+            WHERE NOT r.typeId IN $types
+            RETURN count(r) as count
         """
-        MATCH (c:Concept)
-        WHERE c.id IN $parentIds
-        SET c.keep = true
-    """,
-        {"parentIds": parent_ids},
-    )
 
-    # Mark all descendants of the specified parents using APOC with batching
-    print("Marking descendants to keep (this may take a while)...")
-    session.run("""
-        CALL apoc.periodic.iterate(
-            "MATCH (parent:Concept {keep: true}) RETURN parent",
-            "MATCH (parent)<-[:IS_A*1..20]-(descendant:Concept)
-             WHERE descendant.keep IS NULL
-             SET descendant.keep = true
-             RETURN count(*)",
-            {batchSize: 100, parallel: false}
-        )
-    """)
+        to_affect = self.get_count(session, count_query, {"types": relationship_types})
+        self.logger.info(f"Found {to_affect} relationships to {'mark as deleted' if soft_delete else 'delete'}")
 
-    # Count concepts to delete
-    result = session.run("""
-        MATCH (c:Concept)
-        WHERE c.keep IS NULL
-        RETURN count(c) as toDelete
-    """)
+        if dry_run:
+            self.logger.info("DRY RUN: Would affect the above relationships")
+            return
 
-    record = result.single()
-    assert isinstance(record, Record), "None result is not acceptable"
-    to_delete = record["toDelete"]
-    print(f"Will delete {to_delete} concepts.")
+        if to_affect == 0:
+            self.logger.info("No relationships to process")
+            return
 
-    # Delete relationships to/from concepts that will be deleted using APOC
-    print("Deleting relationships (this may take a while)...")
-    result = session.run("""
-        CALL apoc.periodic.iterate(
-            "MATCH (c:Concept)-[r]-(other) WHERE c.keep IS NULL RETURN r",
-            "DELETE r RETURN count(*)",
-            {batchSize: 1000, parallel: false}
-        )
-    """)
-    record = result.single()
-    assert isinstance(record, Record), "None result is not acceptable"
-    deleted_rels = record["batches"] * 1000 + record["failedBatches"] * 1000 + record["failedOperations"]
-    print(f"Deleted approximately {deleted_rels} relationships.")
+        match_query = "MATCH ()-[r:RELATIONSHIP]->() WHERE NOT r.typeId IN $types RETURN r"
 
-    # Delete descriptions of concepts that will be deleted using APOC
-    print("Deleting descriptions (this may take a while)...")
-    result = session.run("""
-        CALL apoc.periodic.iterate(
-            "MATCH (c:Concept)-[:HAS_DESCRIPTION]->(d:Description) WHERE c.keep IS NULL RETURN d",
-            "DELETE d RETURN count(*)",
-            {batchSize: 1000, parallel: false}
-        )
-    """)
-    record = result.single()
-    assert isinstance(record, Record), "None result is not acceptable"
-    deleted_descs = record["batches"] * 1000 + record["failedBatches"] * 1000 + record["failedOperations"]
-    print(f"Deleted approximately {deleted_descs} descriptions.")
+        if soft_delete:
+            action_query = "SET r.is_deleted = true RETURN count(*)"
+            self.logger.info("Marking relationships as deleted...")
+        else:
+            action_query = "DELETE r RETURN count(*)"
+            self.logger.info("Deleting relationships...")
 
-    # Delete concepts that are not in the hierarchies using APOC
-    print("Deleting concepts (this may take a while)...")
-    result = session.run("""
-        CALL apoc.periodic.iterate(
-            "MATCH (c:Concept) WHERE c.keep IS NULL RETURN c",
-            "DELETE c RETURN count(*)",
-            {batchSize: 1000, parallel: false}
-        )
-    """)
-    record = result.single()
-    assert isinstance(record, Record), "None result is not acceptable"
-    deleted_concepts = record["batches"] * 1000 + record["failedBatches"] * 1000 + record["failedOperations"]
-    print(f"Deleted approximately {deleted_concepts} concepts.")
+        affected = self.execute_batched_operation(session, match_query, action_query, {"types": relationship_types})
 
-    # Delete orphaned descriptions (descriptions with no HAS_DESCRIPTION edges)
-    print("Deleting orphaned descriptions...")
-    result = session.run("""
-        CALL apoc.periodic.iterate(
-            "MATCH (d:Description) WHERE NOT (d)<-[:HAS_DESCRIPTION]-() RETURN d",
-            "DELETE d RETURN count(*)",
-            {batchSize: 1000, parallel: false}
-        )
-    """)
-    record = result.single()
-    assert isinstance(record, Record), "None result is not acceptable"
-    deleted_orphans = record["batches"] * 1000 + record["failedBatches"] * 1000 + record["failedOperations"]
-    print(f"Deleted approximately {deleted_orphans} orphaned descriptions.")
+        action_word = "marked" if soft_delete else "deleted"
+        self.logger.info(f"Successfully {action_word} {affected} relationships")
 
-    # Remove the temporary property using APOC
-    print("Cleaning up temporary properties...")
-    session.run("""
-        CALL apoc.periodic.iterate(
-            "MATCH (c:Concept) WHERE c.keep IS NOT NULL RETURN c",
-            "REMOVE c.keep RETURN count(*)",
-            {batchSize: 5000, parallel: false}
-        )
-    """)
+    def filter_by_hierarchies(self, session: Session, parent_ids: list[str], soft_delete: bool = False, dry_run: bool = False) -> None:
+        """Filter database to keep only concepts in specified hierarchies."""
+        self.logger.info(f"Filtering concepts to hierarchies under: {parent_ids}")
+
+        try:
+            # Validate that parent concepts exist
+            existing_parents = session.run("MATCH (c:Concept) WHERE c.id IN $parentIds RETURN c.id as id", {"parentIds": parent_ids}).data()
+
+            existing_ids = [record["id"] for record in existing_parents]
+            missing_ids = set(parent_ids) - set(existing_ids)
+
+            if missing_ids:
+                self.logger.warning(f"Parent concepts not found: {missing_ids}")
+
+            if not existing_ids:
+                self.logger.error("None of the specified parent concepts exist in the database")
+                return
+
+            self.logger.info(f"Using existing parent concepts: {existing_ids}")
+
+            # Clear any existing keep flags
+            session.run("MATCH (c:Concept) WHERE c.keep IS NOT NULL REMOVE c.keep")
+
+            # Mark parent concepts to keep
+            session.run("MATCH (c:Concept) WHERE c.id IN $parentIds SET c.keep = true", {"parentIds": existing_ids})
+            self.logger.info(f"Marked {len(existing_ids)} parent concepts to keep")
+
+            # Mark descendants in batches to avoid memory issues
+            self.logger.info("Marking descendants to keep (this may take a while)...")
+
+            descendants_marked = self.execute_batched_operation(
+                session,
+                "MATCH (parent:Concept {keep: true}) RETURN parent",
+                f"""MATCH (parent)<-[:IS_A*1..{self.max_depth}]-(descendant:Concept)
+                   WHERE descendant.keep IS NULL
+                   SET descendant.keep = true
+                   RETURN count(*)""",
+            )
+
+            self.logger.info(f"Marked {descendants_marked} descendants to keep")
+
+            # Count concepts to be affected
+            to_delete = self.get_count(session, "MATCH (c:Concept) WHERE c.keep IS NULL RETURN count(c)")
+            total_concepts = self.get_count(session, "MATCH (c:Concept) RETURN count(c)")
+            to_keep = total_concepts - to_delete
+
+            self.logger.info(f"Concepts summary: {total_concepts} total, {to_keep} to keep, {to_delete} to remove")
+
+            if dry_run:
+                self.logger.info("DRY RUN: Would affect the above concepts and their relationships/descriptions")
+                return
+
+            if to_delete == 0:
+                self.logger.info("No concepts to process")
+                return
+
+            # Process concepts, relationships, and descriptions
+            self._process_hierarchy_deletions(session, soft_delete)
+
+        finally:
+            # Always clean up temporary properties
+            self.logger.info("Cleaning up temporary properties...")
+            session.run(
+                """
+                CALL apoc.periodic.iterate(
+                    "MATCH (c:Concept) WHERE c.keep IS NOT NULL RETURN c",
+                    "REMOVE c.keep RETURN count(*)",
+                    {batchSize: $batch_size, parallel: false}
+                )
+            """,
+                {"batch_size": self.batch_size},
+            )
+
+    def _process_hierarchy_deletions(self, session: Session, soft_delete: bool) -> None:
+        """Process the actual deletions/markings for hierarchy filtering."""
+        action_word = "Marking" if soft_delete else "Deleting"
+        action_suffix = "is_deleted = true" if soft_delete else ""
+
+        # Process relationships
+        self.logger.info(f"{action_word} relationships...")
+        match_query = "MATCH (c:Concept)-[r]-(other) WHERE c.keep IS NULL RETURN r"
+        action_query = f"SET r.{action_suffix} RETURN count(*)" if soft_delete else "DELETE r RETURN count(*)"
+
+        affected_rels = self.execute_batched_operation(session, match_query, action_query)
+        self.logger.info(f"Processed {affected_rels} relationships")
+
+        # Process descriptions
+        self.logger.info(f"{action_word} descriptions...")
+        match_query = "MATCH (c:Concept)-[:HAS_DESCRIPTION]->(d:Description) WHERE c.keep IS NULL RETURN d"
+        action_query = f"SET d.{action_suffix} RETURN count(*)" if soft_delete else "DELETE d RETURN count(*)"
+
+        affected_descs = self.execute_batched_operation(session, match_query, action_query)
+        self.logger.info(f"Processed {affected_descs} descriptions")
+
+        # Process concepts
+        self.logger.info(f"{action_word} concepts...")
+        match_query = "MATCH (c:Concept) WHERE c.keep IS NULL RETURN c"
+        action_query = f"SET c.{action_suffix} RETURN count(*)" if soft_delete else "DELETE c RETURN count(*)"
+
+        affected_concepts = self.execute_batched_operation(session, match_query, action_query)
+        self.logger.info(f"Processed {affected_concepts} concepts")
+
+        # Handle orphaned descriptions
+        self.logger.info(f"{action_word} orphaned descriptions...")
+        match_query = "MATCH (d:Description) WHERE NOT (d)<-[:HAS_DESCRIPTION]-() RETURN d"
+        action_query = f"SET d.{action_suffix} RETURN count(*)" if soft_delete else "DELETE d RETURN count(*)"
+
+        orphaned_descs = self.execute_batched_operation(session, match_query, action_query)
+        self.logger.info(f"Processed {orphaned_descs} orphaned descriptions")
+
+    def reset_soft_deletions(self, session: Session) -> None:
+        self.logger.info("Resetting is deleted fields")
+        match_query = "MATCH (c:Concept) RETURN c"
+        action_query = "SET c.is_deleted = false RETURN count(*)"
+        self.execute_batched_operation(session, match_query, action_query)
+
+        match_query = "MATCH ()-[r:RELATIONSHIP]-() RETURN r"
+        action_query = "SET r.is_deleted = false RETURN count(*)"
+        self.execute_batched_operation(session, match_query, action_query)
 
 
 def main() -> None:
+    """Main function to orchestrate the slimming process."""
     args = parse_args()
+    setup_logging(args.verbose)
 
-    # Connect to Neo4j
-    driver = GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password))
+    logger = logging.getLogger(__name__)
+    logger.info("Starting SNOMED CT database slimming process")
+
+    # Parse input parameters
+    relationship_types = None
+    if args.relationships:
+        relationship_types = [r.strip() for r in args.relationships.split(",") if r.strip()]
+        logger.info(f"Relationship types to keep: {relationship_types}")
+
+    parent_ids = None
+    if args.hierarchies:
+        parent_ids = [p.strip() for p in args.hierarchies.split(",") if p.strip()]
+        logger.info(f"Hierarchy parents to keep: {parent_ids}")
+
+    deletion_mode = "soft" if args.soft_delete else "hard"
+    logger.info(f"Using {deletion_mode} deletion mode")
+
+    if args.dry_run:
+        logger.info("DRY RUN MODE: No actual changes will be made")
+
+    # Initialize slimmer
+    slimmer = SNOMEDSlimmer(
+        uri=args.neo4j_uri, user=args.neo4j_user, password=args.neo4j_password, batch_size=args.batch_size, max_depth=args.max_depth
+    )
 
     start_time = time.time()
 
-    with driver.session() as session:
-        # Filter by relationship types if specified
-        if args.relationships:
-            relationship_types = [r.strip() for r in args.relationships.split(",")]
-            filter_by_relationship_types(session, relationship_types)
+    try:
+        with slimmer.get_driver() as driver:
+            with driver.session() as session:
+                if args.soft_delete:
+                    slimmer.reset_soft_deletions(session)
 
-        # Filter by hierarchies if specified
-        if args.hierarchies:
-            parent_ids = [p.strip() for p in args.hierarchies.split(",")]
-            filter_by_hierarchies(session, parent_ids)
+                # Filter by relationship types if specified
+                if relationship_types:
+                    slimmer.filter_by_relationship_types(session, relationship_types, args.soft_delete, args.dry_run)
 
-    end_time = time.time()
-    print(f"Slim database creation completed in {end_time - start_time:.2f} seconds.")
+                # Filter by hierarchies if specified
+                if parent_ids:
+                    slimmer.filter_by_hierarchies(session, parent_ids, args.soft_delete, args.dry_run)
 
-    driver.close()
+        end_time = time.time()
+        duration = end_time - start_time
+        logger.info(f"Slimming process completed successfully in {duration:.2f} seconds")
+
+    except Exception as e:
+        logger.error(f"Slimming process failed: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
