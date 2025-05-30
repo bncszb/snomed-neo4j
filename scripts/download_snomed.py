@@ -3,116 +3,65 @@
 Script to download SNOMED CT data using SNOMED International API.
 """
 
+import argparse
 import os
 import sys
-import argparse
-import requests
-import zipfile
-import tempfile
-from tqdm import tqdm
 from pathlib import Path
 
+import requests
 
-def parse_args():
-    parser = argparse.ArgumentParser(description='Download SNOMED CT data')
-    parser.add_argument('--api-key', required=True, help='SNOMED API key')
-    parser.add_argument('--api-secret', required=True, help='SNOMED API secret')
-    parser.add_argument('--edition', default='international', help='SNOMED edition')
-    parser.add_argument('--version', default='latest', help='SNOMED version')
-    parser.add_argument('--output-dir', required=True, help='Output directory')
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Download SNOMED CT data")
+    parser.add_argument("--api-key", required=True, help="SNOMED API key")
+    parser.add_argument("--api-secret", required=True, help="SNOMED API secret")
+    parser.add_argument("--edition", default="international", help="SNOMED edition")
+    parser.add_argument("--version", default="latest", help="SNOMED version")
+    parser.add_argument("--output-dir", required=True, help="Output directory")
     return parser.parse_args()
 
 
-def authenticate(api_key, api_secret):
-    """Authenticate with SNOMED API and get access token."""
-    auth_url = "https://ims.snomed.org/oauth2/token"
-    auth_data = {
-        "grant_type": "client_credentials",
-        "client_id": api_key,
-        "client_secret": api_secret
-    }
-    
-    response = requests.post(auth_url, data=auth_data)
-    if response.status_code != 200:
-        print(f"Authentication failed: {response.text}")
-        sys.exit(1)
-    
-    return response.json()["access_token"]
-
-
-def get_release_info(token, edition, version):
+def get_download_url() -> str:
     """Get release information for the specified edition and version."""
-    api_url = "https://api.snomed.org/v1/releases"
-    headers = {"Authorization": f"Bearer {token}"}
-    
-    response = requests.get(api_url, headers=headers)
+    api_url = "https://uts-ws.nlm.nih.gov/releases?releaseType=snomed-ct-international-edition&current=true"
+
+    response = requests.get(api_url)
     if response.status_code != 200:
         print(f"Failed to get releases: {response.text}")
         sys.exit(1)
-    
+
     releases = response.json()
-    
-    # Filter by edition
-    edition_releases = [r for r in releases if r["edition"] == edition]
-    if not edition_releases:
-        print(f"No releases found for edition: {edition}")
-        sys.exit(1)
-    
-    # Get specific version or latest
-    if version == "latest":
-        # Sort by date and get the latest
-        release = sorted(edition_releases, key=lambda x: x["effectiveTime"], reverse=True)[0]
-    else:
-        release = next((r for r in edition_releases if r["version"] == version), None)
-        if not release:
-            print(f"Version {version} not found for edition {edition}")
-            sys.exit(1)
-    
-    return release
+
+    assert len(releases) == 1, "There should be one latest version exactly"
+
+    return releases[0]["downloadUrl"]
 
 
-def download_release(token, release, output_dir):
-    """Download the release file."""
-    download_url = release["rf2DistributionUrl"]
-    headers = {"Authorization": f"Bearer {token}"}
-    
-    print(f"Downloading SNOMED CT {release['edition']} {release['version']}...")
-    
-    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
-        response = requests.get(download_url, headers=headers, stream=True)
-        total_size = int(response.headers.get('content-length', 0))
-        
-        with tqdm(total=total_size, unit='B', unit_scale=True) as progress_bar:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    temp_file.write(chunk)
-                    progress_bar.update(len(chunk))
-    
-    # Extract the downloaded file
-    print(f"Extracting files to {output_dir}...")
-    with zipfile.ZipFile(temp_file.name, 'r') as zip_ref:
-        zip_ref.extractall(output_dir)
-    
-    # Clean up the temporary file
-    os.unlink(temp_file.name)
-    print("Download and extraction complete.")
+def download_snomed_with_api_key(api_key: str, file_url: str, output_dir: Path) -> None:
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, os.path.basename(file_url))
+    download_url = f"https://uts-ws.nlm.nih.gov/download?url={file_url}&apiKey={api_key}"
+    try:
+        with requests.get(download_url, stream=True) as r:
+            r.raise_for_status()
+            with open(output_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        print(f"Downloaded to {output_path}")
+    except Exception as e:
+        print(f"Failed to download: {e}")
 
 
-def main():
+def main() -> None:
     args = parse_args()
-    
+
     # Create output directory if it doesn't exist
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Authenticate
-    token = authenticate(args.api_key, args.api_secret)
-    
-    # Get release information
-    release = get_release_info(token, args.edition, args.version)
-    
-    # Download the release
-    download_release(token, release, args.output_dir)
+
+    url = get_download_url()
+
+    download_snomed_with_api_key(args.api_key, url, output_dir)
 
 
 if __name__ == "__main__":
