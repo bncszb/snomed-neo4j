@@ -1,6 +1,6 @@
 FROM neo4j:5.13.0
 
-LABEL maintainer="Your Name <your.email@example.com>"
+LABEL maintainer="b.szabo96@gmail.com"
 LABEL description="Neo4j database with SNOMED CT data"
 
 # Install Python and required packages
@@ -9,9 +9,12 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
+# Install uv
+RUN pip3 install uv
+
 # Install Python dependencies
-COPY requirements.txt /
-RUN pip3 install --no-cache-dir -r /requirements.txt
+COPY pyproject.toml /
+RUN uv pip install --system -e /
 
 # Create directories
 RUN mkdir -p /data/snomed /scripts /config

@@ -10,3 +10,24 @@ dependencies = [
     "requests>=2.32.3",
     "tqdm>=4.67.1",
 ]
+
+[dependency-groups]
+dev = ["ruff>=0.11.12", "pytest>=7.4.0", "pytest-mock>=3.11.1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+
+[tool.ruff]
+line-length = 150
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "UP"]
+extend-select = ["ANN"]
+
+ignore = ["E203", "E501"]
+
+[tool.ruff.format]
