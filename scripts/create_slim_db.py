@@ -10,7 +10,7 @@ import sys
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, LiteralString
 
 from neo4j import Driver, GraphDatabase, Session
 from neo4j.exceptions import Neo4jError
@@ -123,6 +123,7 @@ class SNOMEDSlimmer:
     def get_count(self, session: Session, query: str, parameters: dict[str, Any] | None = None) -> int:
         """Get count from a query safely."""
         try:
+            assert isinstance(query, LiteralString)
             result = session.run(query, parameters or {})
             record = result.single()
             return record[0] if record else 0
