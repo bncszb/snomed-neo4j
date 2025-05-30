@@ -1,0 +1,21 @@
+version: '3'
+
+services:
+  snomed-neo4j:
+    build: .
+    ports:
+      - "7474:7474"  # HTTP
+      - "7473:7473"  # HTTPS
+      - "7687:7687"  # Bolt
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - SNOMED_DATA_SOURCE=mount
+      - SNOMED_SLIM_MODE=false
+    volumes:
+      - ./data/snomed:/data/snomed
+      - ./data/neo4j:/data/neo4j
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
