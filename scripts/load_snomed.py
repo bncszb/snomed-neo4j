@@ -309,8 +309,13 @@ def create_is_a_relationships(session: Session) -> None:
 
     # The IS_A relationship type ID in SNOMED CT is 116680003
     session.run("""
-        MATCH (source)-[r:RELATIONSHIP {typeId: '116680003'}]->(destination)
-        CREATE (source)-[:IS_A]->(destination)
+CALL apoc.periodic.iterate(
+  "MATCH (source)-[r:RELATIONSHIP {typeId: '116680003'}]->(destination) RETURN source, destination, r",
+  "WITH source, destination, r
+   CREATE (source)-[new:IS_A]->(destination)
+   RETURN count(*)",
+  {batchSize: 1000, parallel: false}
+)
     """)
 
     print("IS_A relationships created.")

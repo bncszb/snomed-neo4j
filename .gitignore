@@ -26,11 +26,7 @@ venv/
 ENV/
 env/
 
-# Neo4j data
-data/neo4j/
-
-# SNOMED CT data
-data/snomed/
+data/*
 
 # Logs
 *.log
