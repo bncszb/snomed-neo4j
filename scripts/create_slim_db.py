@@ -123,7 +123,7 @@ class SNOMEDSlimmer:
     def get_count(self, session: Session, query: str, parameters: dict[str, Any] | None = None) -> int:
         """Get count from a query safely."""
         try:
-            assert isinstance(query, LiteralString)
+            # assert isinstance(query, LiteralString)
             result = session.run(query, parameters or {})
             record = result.single()
             return record[0] if record else 0
