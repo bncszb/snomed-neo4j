@@ -27,6 +27,7 @@ ENV/
 env/
 
 data/*
+resources/*
 
 # Logs
 *.log
