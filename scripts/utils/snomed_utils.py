@@ -2,6 +2,10 @@
 Utility functions for working with SNOMED CT data.
 """
 
+import os
+import zipfile
+from pathlib import Path
+
 # SNOMED CT constants
 SNOMED_ROOT_CONCEPT = "138875005"  # SNOMED CT Concept (root)
 IS_A_RELATIONSHIP = "116680003"    # Is a (attribute)
@@ -85,3 +89,49 @@ def parse_concept_id(formatted_id):
     
     # Remove all spaces
     return formatted_id.replace(" ", "")
+
+
+def extract_snomed_zip(zip_path, output_dir):
+    """Extract a SNOMED CT zip file to the specified directory."""
+    if not os.path.exists(zip_path):
+        raise FileNotFoundError(f"Zip file not found: {zip_path}")
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall(output_dir)
+    
+    # Return the path to the extracted directory
+    extracted_dirs = [d for d in Path(output_dir).iterdir() if d.is_dir()]
+    return str(extracted_dirs[0]) if extracted_dirs else output_dir
+
+
+def find_rf2_files(data_dir):
+    """Find RF2 files in the data directory and return their paths."""
+    data_path = Path(data_dir)
+    
+    # Look for Snapshot directory
+    snapshot_dirs = list(data_path.glob("**/Snapshot"))
+    if not snapshot_dirs:
+        # Try looking for Full directory if Snapshot not found
+        full_dirs = list(data_path.glob("**/Full"))
+        if not full_dirs:
+            raise FileNotFoundError("Could not find Snapshot or Full directory in the provided data path")
+        snapshot_dir = full_dirs[0]
+    else:
+        snapshot_dir = snapshot_dirs[0]
+    
+    # Find required RF2 files
+    concept_file = list(snapshot_dir.glob("**/sct2_Concept_*"))
+    description_file = list(snapshot_dir.glob("**/sct2_Description_*"))
+    relationship_file = list(snapshot_dir.glob("**/sct2_Relationship_*"))
+    
+    if not concept_file or not description_file or not relationship_file:
+        raise FileNotFoundError("Could not find all required RF2 files")
+    
+    return {
+        "concept": str(concept_file[0]),
+        "description": str(description_file[0]),
+        "relationship": str(relationship_file[0])
+    }

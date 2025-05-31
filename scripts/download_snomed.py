@@ -14,7 +14,6 @@ import requests
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download SNOMED CT data")
     parser.add_argument("--api-key", required=True, help="SNOMED API key")
-    parser.add_argument("--api-secret", required=True, help="SNOMED API secret")
     parser.add_argument("--edition", default="international", help="SNOMED edition")
     parser.add_argument("--version", default="latest", help="SNOMED version")
     parser.add_argument("--output-dir", required=True, help="Output directory")

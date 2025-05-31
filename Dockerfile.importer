@@ -1,0 +1,30 @@
+FROM python:3.12
+
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Copy Python dependencies
+COPY pyproject.toml uv.lock ./
+RUN uv sync
+
+# Copy scripts and configuration
+COPY scripts/ /scripts/
+COPY config/ /config/
+
+# Create data directory
+RUN mkdir -p /mnt/snomed
+
+# Set permissions
+RUN chmod +x /scripts/entrypoint.sh
+
+# Environment variables
+ENV SNOMED_SLIM_MODE=false \
+    SNOMED_EDITION=international
+
+# Set entrypoint
+ENTRYPOINT ["/scripts/entrypoint.sh"]

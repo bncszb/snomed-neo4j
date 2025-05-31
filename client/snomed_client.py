@@ -22,8 +22,10 @@ class SnomedClient:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (c:Concept {id: $id})
+                WHERE c.is_deleted IS NULL OR c.is_deleted = false
                 OPTIONAL MATCH (c)-[:HAS_DESCRIPTION]->(d:Description)
-                WHERE d.typeId = '900000000000003001' AND d.active = true
+                WHERE (d.is_deleted IS NULL OR d.is_deleted = false)
+                  AND d.typeId = '900000000000003001' AND d.active = true
                 RETURN c.id as id, c.active as active, d.term as fsn
             """, {"id": concept_id})
             
@@ -41,8 +43,10 @@ class SnomedClient:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (c:Concept {id: $id})-[:HAS_DESCRIPTION]->(d:Description)
-                WHERE d.typeId = '900000000000013009' AND d.active = true
-                AND d.languageCode = $languageCode
+                WHERE (c.is_deleted IS NULL OR c.is_deleted = false)
+                  AND (d.is_deleted IS NULL OR d.is_deleted = false)
+                  AND d.typeId = '900000000000013009' AND d.active = true
+                  AND d.languageCode = $languageCode
                 RETURN d.term as term
             """, {"id": concept_id, "languageCode": language_code})
             
@@ -54,7 +58,9 @@ class SnomedClient:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (parent:Concept {id: $id})<-[:IS_A]-(child:Concept)
-                WHERE child.active = true
+                WHERE (parent.is_deleted IS NULL OR parent.is_deleted = false)
+                  AND (child.is_deleted IS NULL OR child.is_deleted = false)
+                  AND child.active = true
                 RETURN child.id as id
             """, {"id": concept_id})
             
@@ -65,7 +71,9 @@ class SnomedClient:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (child:Concept {id: $id})-[:IS_A]->(parent:Concept)
-                WHERE parent.active = true
+                WHERE (child.is_deleted IS NULL OR child.is_deleted = false)
+                  AND (parent.is_deleted IS NULL OR parent.is_deleted = false)
+                  AND parent.active = true
                 RETURN parent.id as id
             """, {"id": concept_id})
             
@@ -76,7 +84,9 @@ class SnomedClient:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (child:Concept {id: $id})-[:IS_A*]->(ancestor:Concept)
-                WHERE ancestor.active = true
+                WHERE (child.is_deleted IS NULL OR child.is_deleted = false)
+                  AND (ancestor.is_deleted IS NULL OR ancestor.is_deleted = false)
+                  AND ancestor.active = true
                 RETURN DISTINCT ancestor.id as id
             """, {"id": concept_id})
             
@@ -87,7 +97,9 @@ class SnomedClient:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (ancestor:Concept {id: $id})<-[:IS_A*]-(descendant:Concept)
-                WHERE descendant.active = true
+                WHERE (ancestor.is_deleted IS NULL OR ancestor.is_deleted = false)
+                  AND (descendant.is_deleted IS NULL OR descendant.is_deleted = false)
+                  AND descendant.active = true
                 RETURN DISTINCT descendant.id as id
             """, {"id": concept_id})
             
@@ -99,6 +111,8 @@ class SnomedClient:
             result = session.run("""
                 MATCH (source:Concept {id: $sourceId})
                 MATCH (target:Concept {id: $targetId})
+                WHERE (source.is_deleted IS NULL OR source.is_deleted = false)
+                  AND (target.is_deleted IS NULL OR target.is_deleted = false)
                 RETURN (source)-[:IS_A*]->(target) as isA
             """, {"sourceId": source_id, "targetId": target_id})
             
@@ -110,7 +124,9 @@ class SnomedClient:
         with self.driver.session() as session:
             result = session.run("""
                 MATCH (c:Concept)-[:HAS_DESCRIPTION]->(d:Description)
-                WHERE d.term CONTAINS $term AND c.active = true AND d.active = true
+                WHERE (c.is_deleted IS NULL OR c.is_deleted = false)
+                  AND (d.is_deleted IS NULL OR d.is_deleted = false)
+                  AND d.term CONTAINS $term AND c.active = true AND d.active = true
                 RETURN DISTINCT c.id as id, d.term as matchedTerm
                 LIMIT $limit
             """, {"term": term, "limit": limit})
@@ -123,7 +139,10 @@ class SnomedClient:
             params = {"id": concept_id}
             query = """
                 MATCH (c:Concept {id: $id})-[r:RELATIONSHIP]->(target:Concept)
-                WHERE c.active = true AND target.active = true
+                WHERE (c.is_deleted IS NULL OR c.is_deleted = false)
+                  AND (target.is_deleted IS NULL OR target.is_deleted = false)
+                  AND (r.is_deleted IS NULL OR r.is_deleted = false)
+                  AND c.active = true AND target.active = true
             """
             
             if relationship_type_id:

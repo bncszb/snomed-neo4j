@@ -39,7 +39,7 @@ def get_database_statistics(driver):
         labels = [record["label"] for record in result]
         
         for label in labels:
-            count_result = session.run(f"MATCH (n:{label}) RETURN count(n) as count")
+            count_result = session.run(f"MATCH (n:{label}) WHERE n.is_deleted IS NULL OR n.is_deleted = false RETURN count(n) as count")
             stats[f"{label}_count"] = count_result.single()["count"]
         
         # Count relationship types
@@ -47,7 +47,61 @@ def get_database_statistics(driver):
         rel_types = [record["relationshipType"] for record in result]
         
         for rel_type in rel_types:
-            count_result = session.run(f"MATCH ()-[r:{rel_type}]->() RETURN count(r) as count")
+            count_result = session.run(f"MATCH ()-[r:{rel_type}]->() WHERE r.is_deleted IS NULL OR r.is_deleted = false RETURN count(r) as count")
             stats[f"{rel_type}_count"] = count_result.single()["count"]
     
     return stats
+
+
+def check_database_exists(driver):
+    """Check if the database has any SNOMED CT data."""
+    with driver.session() as session:
+        result = session.run("MATCH (c:Concept) RETURN count(c) as count LIMIT 1")
+        record = result.single()
+        return record and record["count"] > 0
+
+
+def check_database_health(driver):
+    """Check the health of the Neo4j database."""
+    health_info = {
+        "status": "healthy",
+        "issues": []
+    }
+    
+    try:
+        with driver.session() as session:
+            # Check if database is responsive
+            session.run("RETURN 1")
+            
+            # Check for orphaned descriptions
+            result = session.run("""
+                MATCH (d:Description)
+                WHERE NOT (d)<-[:HAS_DESCRIPTION]-()
+                  AND (d.is_deleted IS NULL OR d.is_deleted = false)
+                RETURN count(d) as count
+            """)
+            orphaned = result.single()["count"]
+            if orphaned > 0:
+                health_info["issues"].append(f"Found {orphaned} orphaned descriptions")
+                
+            # Check for missing IS_A relationships
+            result = session.run("""
+                MATCH (c:Concept)-[r:RELATIONSHIP {typeId: '116680003'}]->(d:Concept)
+                WHERE NOT (c)-[:IS_A]->(d)
+                  AND (c.is_deleted IS NULL OR c.is_deleted = false)
+                  AND (d.is_deleted IS NULL OR d.is_deleted = false)
+                  AND (r.is_deleted IS NULL OR r.is_deleted = false)
+                RETURN count(r) as count
+            """)
+            missing_is_a = result.single()["count"]
+            if missing_is_a > 0:
+                health_info["issues"].append(f"Found {missing_is_a} missing IS_A relationships")
+                
+    except Exception as e:
+        health_info["status"] = "unhealthy"
+        health_info["issues"].append(str(e))
+    
+    if health_info["issues"]:
+        health_info["status"] = "issues_found"
+        
+    return health_info

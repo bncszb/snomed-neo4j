@@ -1,21 +1,47 @@
 services:
-  snomed-neo4j:
-    build: .
+  # Raw Neo4j service
+  neo4j:
+    image: neo4j:5.13.0
     ports:
-      - "7474:7474" # HTTP
-      - "7473:7473" # HTTPS
-      - "7687:7687" # Bolt
+      - "7474:7474"
+      - "7473:7473" 
+      - "7687:7687"
     environment:
       - NEO4J_AUTH=neo4j/neo4jneo4j
-      - SNOMED_DATA_SOURCE=mount
-      - SNOMED_SLIM_MODE=false
       - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_server_memory_heap_initial__size=1G
+      - NEO4J_server_memory_heap_max__size=1G
+      - NEO4J_server_memory_pagecache_size=2G
     volumes:
-      # - ./data/snomed:/data/snomed
-      - ./data/neo4j_data:/data
-      - ./data/neo4j_plugins:/plugins
+      - neo4j_data:/data
+      - neo4j_plugins:/plugins
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7474"]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "neo4jneo4j", "RETURN 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 20
+
+  # SNOMED data importer
+  snomed-importer:
+    build:
+      context: .
+      dockerfile: Dockerfile.importer
+    environment:
+      - NEO4J_PASSWORD=neo4jneo4j
+      - SNOMED_SLIM_MODE=false
+      - SNOMED_DATA_SOURCE=startup_download
+      - SNOMED_API_KEY=${SNOMED_API_KEY}
+      - SNOMED_API_SECRET=${SNOMED_API_SECRET}
+      - SNOMED_EDITION=${SNOMED_EDITION:-international}
+      - SNOMED_VERSION=${SNOMED_VERSION:-latest}
+    volumes:
+      - ./data/snomed:/mnt/snomed
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    profiles:
+      - import
+
+volumes:
+  neo4j_data:
+  neo4j_plugins:
