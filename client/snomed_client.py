@@ -157,25 +157,3 @@ class SnomedClient:
             
             return [{"typeId": record["typeId"], "targetId": record["targetId"]} for record in result]
 
-
-# Example usage
-if __name__ == "__main__":
-    # Example connection to a local Neo4j instance
-    client = SnomedClient("bolt://localhost:7687", "neo4j", "password")
-    
-    try:
-        # Example: Get information about "Clinical finding" concept
-        concept = client.get_concept("404684003")
-        print(f"Concept: {concept}")
-        
-        # Example: Get children of "Clinical finding"
-        children = client.get_children("404684003")
-        print(f"Children count: {len(children)}")
-        
-        # Example: Find concepts containing "diabetes"
-        diabetes_concepts = client.find_concepts("diabetes")
-        for concept in diabetes_concepts:
-            print(f"Found: {concept['id']} - {concept['term']}")
-    
-    finally:
-        client.close()

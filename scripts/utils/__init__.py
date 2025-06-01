@@ -1,1 +1,0 @@
-# SNOMED CT utility functions
