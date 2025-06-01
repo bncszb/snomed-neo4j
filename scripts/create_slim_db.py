@@ -10,7 +10,7 @@ import sys
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, LiteralString
+from typing import Any
 
 from neo4j import Driver, GraphDatabase, Session
 from neo4j.exceptions import Neo4jError
@@ -153,8 +153,6 @@ class SNOMEDSlimmer:
             self.logger.info("No relationships to process")
             return
 
-        match_query = "MATCH ()-[r:RELATIONSHIP]->() WHERE NOT r.typeId IN $types RETURN r"
-
         if soft_delete:
             action_query = "SET r.is_deleted = true RETURN count(*)"
             self.logger.info("Marking relationships as deleted...")
@@ -162,8 +160,39 @@ class SNOMEDSlimmer:
             action_query = "DELETE r RETURN count(*)"
             self.logger.info("Deleting relationships...")
 
-        affected = self.execute_batched_operation(session, match_query, action_query, {"types": relationship_types})
+        try:
+            result = session.run(
+                """
+                CALL apoc.periodic.iterate(
+                    "MATCH ()-[r:RELATIONSHIP]->() WHERE NOT r.typeId IN $types RETURN r",
+                    $action_query,
+                    {batchSize: $batch_size, parallel: false, retries: 3, params: {types: $types}}
+                )
+                """,
+                {
+                    "types": relationship_types,
+                    "action_query": action_query,
+                    "batch_size": self.batch_size,
+                },
+            )
+            record = result.single()
 
+            if not record:
+                affected = 0
+            else:
+                # Calculate total affected items
+                total = record.get("batches", 0) * self.batch_size
+                total += record.get("failedBatches", 0) * self.batch_size
+                total += record.get("failedOperations", 0)
+
+                if record.get("errorMessages"):
+                    self.logger.warning(f"Operation had errors: {record['errorMessages']}")
+
+                affected = total
+
+        except Neo4jError as e:
+            self.logger.error(f"Error executing batched operation: {e}")
+            raise
         action_word = "marked" if soft_delete else "deleted"
         self.logger.info(f"Successfully {action_word} {affected} relationships")
 
