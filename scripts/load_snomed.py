@@ -20,6 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username")
     parser.add_argument("--neo4j-password", default="neo4jneo4j", help="Neo4j password")
     parser.add_argument("--batch-size", type=int, default=10000, help="Batch size for loading")
+    parser.add_argument("--keep-inactive")
     return parser.parse_args()
 
 
@@ -82,7 +83,7 @@ def setup_neo4j_schema(session: Session) -> None:
     """)
 
 
-def load_concepts(session: Session, concept_file: Path, batch_size: int) -> None:
+def load_concepts(session: Session, concept_file: Path, batch_size: int, keep_inactive: bool = False) -> None:
     """Load concepts from RF2 file into Neo4j."""
     print("Loading concepts...")
 
@@ -100,6 +101,10 @@ def load_concepts(session: Session, concept_file: Path, batch_size: int) -> None
             for row in reader:
                 # Convert active to boolean
                 active = row["active"] == "1"
+
+                if not active and not keep_inactive:
+                    pbar.update(1)
+                    continue
 
                 # Add to batch
                 batch.append({"id": row["id"], "active": active, "moduleId": row["moduleId"], "definitionStatusId": row["definitionStatusId"]})
@@ -144,7 +149,7 @@ def load_concepts(session: Session, concept_file: Path, batch_size: int) -> None
     print(f"Loaded {loaded} concepts.")
 
 
-def load_descriptions(session: Session, description_file: Path, batch_size: int) -> None:
+def load_descriptions(session: Session, description_file: Path, batch_size: int, keep_inactive: bool = False) -> None:
     """Load descriptions from RF2 file into Neo4j."""
     print("Loading descriptions...")
 
@@ -164,6 +169,10 @@ def load_descriptions(session: Session, description_file: Path, batch_size: int)
             for row in reader:
                 # Convert active to boolean
                 active = row["active"] == "1"
+
+                if not active and not keep_inactive:
+                    pbar.update(1)
+                    continue
 
                 # Add to batch
                 batch.append(
@@ -223,7 +232,7 @@ def load_descriptions(session: Session, description_file: Path, batch_size: int)
     print(f"Loaded {loaded} descriptions.")
 
 
-def load_relationships(session: Session, relationship_file: Path, batch_size: int) -> None:
+def load_relationships(session: Session, relationship_file: Path, batch_size: int, keep_inactive: bool = False) -> None:
     """Load relationships from RF2 file into Neo4j."""
     print("Loading relationships...")
 
@@ -243,7 +252,7 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
                 active = row["active"] == "1"
 
                 # Skip inactive relationships
-                if not active:
+                if not active and not keep_inactive:
                     pbar.update(1)
                     continue
 
@@ -333,9 +342,9 @@ def main() -> None:
     with driver.session() as session:
         setup_neo4j_schema(session)
 
-        load_concepts(session, rf2_files["concept"], args.batch_size)
-        load_descriptions(session, rf2_files["description"], args.batch_size)
-        load_relationships(session, rf2_files["relationship"], args.batch_size)
+        load_concepts(session, rf2_files["concept"], args.batch_size, args.keep_inactive)
+        load_descriptions(session, rf2_files["description"], args.batch_size, args.keep_inactive)
+        load_relationships(session, rf2_files["relationship"], args.batch_size, args.keep_inactive)
 
         create_is_a_relationships(session)
 
