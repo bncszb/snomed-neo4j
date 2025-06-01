@@ -10,7 +10,7 @@ import sys
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
+from typing import Any, LiteralString
 
 from neo4j import Driver, GraphDatabase, Session
 from neo4j.exceptions import Neo4jError
@@ -120,7 +120,7 @@ class SNOMEDSlimmer:
             self.logger.error(f"Error executing batched operation: {e}")
             raise
 
-    def get_count(self, session: Session, query: str, parameters: dict[str, Any] | None = None) -> int:
+    def get_count(self, session: Session, query: LiteralString, parameters: dict[str, Any] | None = None) -> int:
         """Get count from a query safely."""
         try:
             # assert isinstance(query, LiteralString)
