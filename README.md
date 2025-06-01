@@ -1,5 +1,7 @@
 # SNOMED CT Neo4j Docker Image
 
+> **DISCLAIMER**: This project is currently under active development and is not a finished product. Features are being added as needed for other projects. Use at your own risk and expect changes to the API and functionality.
+
 A Docker image that provides a Neo4j database pre-configured for SNOMED CT terminology. This project allows users to easily deploy a graph database containing SNOMED CT data for healthcare applications, research, and development.
 
 ## Overview
