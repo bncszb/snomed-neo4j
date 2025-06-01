@@ -34,6 +34,43 @@ wait_for_neo4j() {
     sleep 5
 }
 
+# Function to extract zip files
+extract_zip_files() {
+    local data_dir="$1"
+    log "Checking for zip files to extract in $data_dir..."
+    
+    # Find all zip files in the directory
+    local zip_files=$(find "$data_dir" -name "*.zip" -type f)
+    
+    if [ -z "$zip_files" ]; then
+        log "No zip files found to extract."
+        return 0
+    fi
+    
+    # Extract each zip file
+    for zip_file in $zip_files; do
+        log "Extracting: $(basename "$zip_file")"
+        
+        # Create extraction directory based on zip filename (without .zip extension)
+        local extract_dir="${zip_file%.zip}"
+        
+        # Extract the zip file
+        if unzip -q "$zip_file" -d "$extract_dir"; then
+            log "Successfully extracted: $(basename "$zip_file")"
+            
+            # Optionally remove the zip file after successful extraction
+            # Uncomment the next line if you want to delete zip files after extraction
+            # rm "$zip_file"
+        else
+            log "ERROR: Failed to extract: $(basename "$zip_file")"
+            return 1
+        fi
+    done
+    
+    log "All zip files extracted successfully."
+    return 0
+}
+
 # Wait for Neo4j to be ready
 wait_for_neo4j
 
@@ -50,35 +87,40 @@ else
     # Check if SNOMED data exists in /mnt/snomed
     if [ ! -d "/mnt/snomed" ] || [ ! "$(ls -A /mnt/snomed)" ]; then
         log "No SNOMED data found in /mnt/snomed. Attempting download..."
+    
+        # Check if API credentials are provided
+        if [ -z "$SNOMED_API_KEY" ]; then
+            log "ERROR: SNOMED_API_KEY must be provided for startup_download."
+            exit 1
+        fi
         
-        # Handle data download
-        if [[ "$SNOMED_DATA_SOURCE" == "startup_download" ]]; then
-            log "Downloading SNOMED CT data using API credentials..."
-            
-            # Check if API credentials are provided
-            if [[ -z "$SNOMED_API_KEY" || -z "$SNOMED_API_SECRET" ]]; then
-                log "ERROR: SNOMED_API_KEY and SNOMED_API_SECRET must be provided for startup_download."
-                exit 1
-            fi
-            
-            # Create snomed directory if it doesn't exist
-            mkdir -p /mnt/snomed
-            
-            # Download SNOMED CT data
-            uv run python /scripts/download_snomed.py \
-                --api-key "$SNOMED_API_KEY" \
-                --api-secret "$SNOMED_API_SECRET" \
-                --edition "$SNOMED_EDITION" \
-                --version "$SNOMED_VERSION" \
-                --output-dir "/mnt/snomed"
-            
-            if [ $? -ne 0 ]; then
-                log "ERROR: Failed to download SNOMED CT data."
-                exit 1
-            fi
-        else
-            log "ERROR: No SNOMED CT data found in /mnt/snomed and download not configured."
-            log "Please either mount SNOMED CT data to /mnt/snomed or set SNOMED_DATA_SOURCE=startup_download with API credentials."
+        # Create snomed directory if it doesn't exist
+        mkdir -p /mnt/snomed
+        
+        # Download SNOMED CT data
+        uv run python /scripts/download_snomed.py \
+            --api-key "$SNOMED_API_KEY" \
+            --edition "$SNOMED_EDITION" \
+            --version "$SNOMED_VERSION" \
+            --output-dir "/mnt/snomed"
+        
+        if [ $? -ne 0 ]; then
+            log "ERROR: Failed to download SNOMED CT data."
+            exit 1
+        fi
+        
+        # Extract downloaded zip files
+        extract_zip_files "/mnt/snomed"
+        if [ $? -ne 0 ]; then
+            log "ERROR: Failed to extract SNOMED CT data."
+            exit 1
+        fi
+    else
+        # Data directory exists but might contain zip files that need extraction
+        log "SNOMED data directory exists. Checking for zip files to extract..."
+        extract_zip_files "/mnt/snomed"
+        if [ $? -ne 0 ]; then
+            log "ERROR: Failed to extract existing zip files."
             exit 1
         fi
     fi

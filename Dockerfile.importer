@@ -3,6 +3,7 @@ FROM neo4j:5.13.0
 # Install required packages
 RUN apt-get update && apt-get install -y \
     curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv

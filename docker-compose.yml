@@ -19,7 +19,7 @@ services:
       test:
         ["CMD", "cypher-shell", "-u", "neo4j", "-p", "neo4jneo4j", "RETURN 1"]
       interval: 10s
-      timeout: 5s
+      timeout: 10s
       retries: 20
     networks:
       - snomed-network
