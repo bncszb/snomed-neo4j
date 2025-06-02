@@ -205,23 +205,11 @@ source = { editable = "packages/snomed-client" }
 name = "snomed-core"
 version = "0.1.0"
 source = { editable = "packages/snomed-core" }
-
-[[package]]
-name = "snomed-ct-neo4j"
-version = "0.1.0"
-source = { virtual = "." }
 dependencies = [
     { name = "neo4j" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "tqdm" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-mock" },
-    { name = "ruff" },
 ]
 
 [package.metadata]
@@ -231,6 +219,20 @@ requires-dist = [
     { name = "requests", specifier = ">=2.32.3" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
+
+[[package]]
+name = "snomed-ct-neo4j"
+version = "0.1.0"
+source = { virtual = "." }
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-mock" },
+    { name = "ruff" },
+]
+
+[package.metadata]
 
 [package.metadata.requires-dev]
 dev = [

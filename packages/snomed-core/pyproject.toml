@@ -5,7 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Bence Szabó", email = "bszabo96@gmail.com" }]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "neo4j>=5.28.1",
+    "python-dotenv>=1.1.0",
+    "requests>=2.32.3",
+    "tqdm>=4.67.1",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -13,3 +18,7 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 package = true
+
+[project.scripts]
+download = "snomed_core.download:main"
+load = "snomed_core.loader:main"

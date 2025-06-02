@@ -44,3 +44,11 @@ def download(api_key: str | None = None, output_dir: Path | None = None) -> None
 
     url = get_download_url()
     download_snomed_with_api_key(api_key, url, output_dir)
+
+
+def main() -> None:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+
+    download()
