@@ -348,8 +348,8 @@ def main() -> None:
     hierarchies = os.environ["SNOMED_SLIM_HIERARCHIES"]
     soft_delete = env_bool("SNOMED_SLIM_SOFT_DELETE")
     dry_run = env_bool("SNOMED_SLIM_DRY_RUN")
-    batch_size = optional_env_int(os.environ["SNOMED_IMPORT_BATCH"]) or 1000
-    max_depth = optional_env_int(os.environ["SNOMED_SLIM_MAX_DEPTH"]) or 20
+    batch_size = optional_env_int("SNOMED_IMPORT_BATCH") or 1000
+    max_depth = optional_env_int("SNOMED_SLIM_MAX_DEPTH") or 20
 
     slim(
         relationships,

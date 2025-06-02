@@ -4,6 +4,7 @@ Script to load SNOMED CT RF2 files into Neo4j.
 """
 
 import csv
+import logging
 import os
 import sys
 import time
@@ -18,12 +19,11 @@ from snomed_core.utils import env_bool
 
 def find_rf2_files(data_dir: Path) -> dict:
     """Find RF2 files in the data directory."""
-    print(os.getcwd())
     data_path = Path(data_dir)
 
     snapshot_dirs = list(data_path.glob("**/Snapshot"))
     if not snapshot_dirs:
-        print("Error: Could not find Snapshot directory in the provided data path.")
+        logging.error("Could not find Snapshot directory in the provided data path.")
         sys.exit(1)
 
     snapshot_dir = snapshot_dirs[0]
@@ -33,7 +33,7 @@ def find_rf2_files(data_dir: Path) -> dict:
     relationship_file = list(snapshot_dir.glob("**/sct2_Relationship_Snapshot*.txt"))
 
     if not concept_file or not description_file or not relationship_file:
-        print("Error: Could not find all required RF2 files.")
+        logging.error("Could not find all required RF2 files.")
         sys.exit(1)
 
     return {"concept": str(concept_file[0]), "description": str(description_file[0]), "relationship": str(relationship_file[0])}
@@ -327,16 +327,17 @@ def main() -> None:
     from dotenv import load_dotenv
 
     load_dotenv()
-
+    print("=============1======================================")
     rf2_files = find_rf2_files(Path(os.environ["SNOMED_DIR"]))
-
+    print("==============2=====================================")
     driver = get_driver()
 
     start_time = time.time()
-
+    print("=============3======================================")
     with driver.session() as session:
+        print("=========4==========================================")
         setup_neo4j_schema(session)
-
+        print("=========5==========================================")
         load_concepts(session, rf2_files["concept"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
         load_descriptions(session, rf2_files["description"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
         load_relationships(session, rf2_files["relationship"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
