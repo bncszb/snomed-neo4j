@@ -13,7 +13,7 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
-from snomed_core.client import get_driver
+from snomed_core.client import get_driver, get_neo4j_http_uri
 from snomed_core.download import main as download_main
 from snomed_core.loader import main as load_main
 from snomed_core.logging import setup_logging
@@ -49,7 +49,7 @@ def wait_for_neo4j() -> None:
 
     while attempt < max_attempts:
         try:
-            response = requests.get("http://neo4j:7474", timeout=5)
+            response = requests.get(get_neo4j_http_uri(), timeout=5)
             if response.status_code < 500:  # Accept any non-server error status
                 break
         except requests.RequestException:

@@ -30,9 +30,9 @@ services:
       context: .
       dockerfile: Dockerfile.importer
     environment:
-      - NEO4J_URI=${NEO4J_URI}
-      - NEO4J_USER=${NEO4J_USER}
-      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+      - SNOMED_NEO4J_HOST=${SNOMED_NEO4J_HOST}
+      - SNOMED_NEO4J_USER=${SNOMED_NEO4J_USER}
+      - SNOMED_NEO4J_PASSWORD=${SNOMED_NEO4J_PASSWORD}
       - SNOMED_API_KEY=${SNOMED_API_KEY}
       - SNOMED_DIR=${SNOMED_DIR}
       - SNOMED_IMPORT_BATCH=${SNOMED_IMPORT_BATCH}

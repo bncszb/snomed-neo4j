@@ -3,52 +3,43 @@ FROM neo4j:5.13.0 as builder
 # Install required packages
 RUN apt-get update && apt-get install -y \
     curl \
-    python3 \
-    python3-pip \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
+WORKDIR /app
+
 # Copy Python dependencies
 COPY pyproject.toml uv.lock ./
-RUN uv sync
-
-# Copy scripts and configuration
-COPY scripts/ /scripts/
+COPY packages packages
 COPY resources/ /resources/
-COPY config/neo4j.conf /var/lib/neo4j/conf/neo4j.conf
+RUN uv sync --all-packages
 
-# Create directories
-RUN mkdir -p /snomed
+COPY config/neo4j.conf /var/lib/neo4j/conf/neo4j.conf
+# Create data directory
+RUN mkdir -p /mnt/snomed
 
 # Build arguments
 ARG SNOMED_DIR=""
 ARG SNOMED_API_KEY=""
-ARG SNOMED_API_SECRET=""
 ARG SNOMED_EDITION="international"
 ARG SNOMED_VERSION="latest"
-ARG SNOMED_SLIM_MODE="false"
-ARG SNOMED_INCLUDE_RELATIONSHIPS=""
-ARG SNOMED_INCLUDE_HIERARCHIES=""
-ARG SNOMED_SOFT_DELETE="false"
+ARG SNOMED_SLIM_HIERARCHIES=""
+ARG SNOMED_SLIM_RELATIONSHIPS=""
+ARG SNOMED_SLIM_MAX_DEPTHS="20"
+ARG SNOMED_SLIM_SOFT_DELETE="false"
+ARG SNOMED_KEEP_INACTIVE="false"
 
-# Get SNOMED data (either from build arg directory or download)
+# Copy SNOMED data if provided via build context
 RUN if [ -n "$SNOMED_DIR" ] && [ -d "/resources/$SNOMED_DIR" ]; then \
-        echo "Copying SNOMED data from build context" && \
-        cp -r "/resources/$SNOMED_DIR"/* /snomed/; \
-    elif [ -n "$SNOMED_API_KEY" ] && [ -n "$SNOMED_API_SECRET" ]; then \
-        echo "Downloading SNOMED data during build" && \
-        uv run python /scripts/download_snomed.py \
-            --api-key "$SNOMED_API_KEY" \
-            --edition "$SNOMED_EDITION" \
-            --version "$SNOMED_VERSION" \
-            --output-dir "/snomed"; \
-    else \
-        echo "ERROR: Either SNOMED_DIR or SNOMED_API_KEY/SNOMED_API_SECRET must be provided" && \
-        exit 1; \
+    echo "Copying SNOMED data from build context" && \
+    cp -r "/resources/$SNOMED_DIR"/* /mnt/snomed/; \
     fi
+
+# Copy Neo4j configuration
+COPY config/neo4j.conf /var/lib/neo4j/conf/neo4j.conf
 
 # Set Neo4j environment for builder stage
 ENV NEO4J_AUTH=neo4j/neo4jneo4j \
@@ -58,57 +49,46 @@ ENV NEO4J_AUTH=neo4j/neo4jneo4j \
     NEO4J_PLUGINS='["apoc"]' \
     NEO4J_dbms_security_auth__enabled=true
 
-# Start Neo4j and load data
-RUN  echo "Starting Neo4j and loading SNOMED data" && \
+# Set environment variables for the importer script
+ENV SNOMED_API_KEY=${SNOMED_API_KEY} \
+    SNOMED_EDITION=${SNOMED_EDITION} \
+    SNOMED_VERSION=${SNOMED_VERSION} \
+    SNOMED_SLIM_HIERARCHIES=${SNOMED_SLIM_HIERARCHIES} \
+    SNOMED_SLIM_RELATIONSHIPS=${SNOMED_SLIM_RELATIONSHIPS} \
+    SNOMED_NEO4J_PASSWORD=neo4jneo4j \
+    SNOMED_NEO4J_HOST=localhost  \
+    SNOMED_NEO4J_USER=neo4j \
+    SNOMED_IMPORT_BATCH=1000 \
+    SNOMED_DIR=/mnt/snomed \
+    SNOMED_SLIM_DRY_RUN=false
+
+# Start Neo4j, run importer, then stop Neo4j
+RUN echo "Starting Neo4j and loading SNOMED data" && \
     /startup/docker-entrypoint.sh neo4j &> /tmp/neo4j.log & \
     NEO4J_PID=$! && \
     echo "Waiting for Neo4j to start..." && \
     timeout=120 && \
     while [ $timeout -gt 0 ]; do \
-        if curl -s -f http://localhost:7474/browser/ >/dev/null 2>&1 && \
-           cypher-shell -u neo4j -p neo4jneo4j "RETURN 1" >/dev/null 2>&1; then \
-            echo "Neo4j started successfully and authentication is working."; \
-            break; \
-        fi; \
-        if [ $((timeout % 10)) -eq 0 ]; then \
-            echo "Still waiting... ($timeout seconds remaining)"; \
-        fi; \
-        sleep 2; \
-        timeout=$((timeout-2)); \
+    if curl -s -f http://localhost:7474/browser/ >/dev/null 2>&1 && \
+    cypher-shell -u ${SNOMED_NEO4J_USER} -p ${SNOMED_NEO4J_PASSWORD} "RETURN 1" >/dev/null 2>&1; then \
+    echo "Neo4j started successfully and authentication is working."; \
+    break; \
+    fi; \
+    if [ $((timeout % 10)) -eq 0 ]; then \
+    echo "Still waiting... ($timeout seconds remaining)"; \
+    fi; \
+    sleep 2; \
+    timeout=$((timeout-2)); \
     done && \
     if [ $timeout -le 0 ]; then \
-        echo "ERROR: Neo4j failed to start within 120 seconds"; \
-        echo "Neo4j logs:"; \
-        cat /tmp/neo4j.log; \
-        exit 1; \
+    echo "ERROR: Neo4j failed to start within 120 seconds"; \
+    echo "Neo4j logs:"; \
+    cat /tmp/neo4j.log; \
+    exit 1; \
     fi && \
-    echo "Verifying Neo4j connection..." && \
-    cypher-shell -u neo4j -p neo4jneo4j "CALL db.ping()" && \
-    echo "Loading SNOMED CT data..." && \
-    uv run python /scripts/load_snomed.py \
-        --data-dir "/snomed" \
-        --neo4j-uri "bolt://localhost:7687" \
-        --neo4j-user "neo4j" \
-        --neo4j-password "neo4jneo4j" && \
-    if [ "$SNOMED_SLIM_MODE" = "true" ]; then \
-        echo "Creating slim database..." && \
-        SLIM_ARGS="" && \
-        if [ -n "$SNOMED_INCLUDE_RELATIONSHIPS" ]; then \
-            SLIM_ARGS="$SLIM_ARGS --relationships $SNOMED_INCLUDE_RELATIONSHIPS"; \
-        fi && \
-        if [ -n "$SNOMED_INCLUDE_HIERARCHIES" ]; then \
-            SLIM_ARGS="$SLIM_ARGS --hierarchies $SNOMED_INCLUDE_HIERARCHIES"; \
-        fi && \
-        if [ "$SNOMED_SOFT_DELETE" = "true" ]; then \
-            SLIM_ARGS="$SLIM_ARGS --soft-delete"; \
-        fi && \
-        uv run python /scripts/create_slim_db.py \
-            $SLIM_ARGS \
-            --neo4j-uri "bolt://localhost:7687" \
-            --neo4j-user "neo4j" \
-            --neo4j-password "neo4jneo4j"; \
-    fi && \
-    echo "Stopping Neo4j..." && \
+    echo "Neo4j is ready, running importer..." && \
+    uv run packages/snomed-core/scripts/snomed_importer.py && \
+    echo "Import completed, stopping Neo4j..." && \
     neo4j stop && \
     wait $NEO4J_PID && \
     echo "SNOMED CT data loaded successfully."

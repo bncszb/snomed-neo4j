@@ -29,31 +29,33 @@ This Docker image packages Neo4j with scripts to load and configure SNOMED CT da
 
 ### Environment Variables
 
-| Variable | Description | Default | Required |
-|----------|-------------|---------|----------|
-| `SNOMED_API_KEY` | SNOMED International API key | - | For download options |
-| `SNOMED_API_SECRET` | SNOMED International API secret | - | For download options |
-| `SNOMED_EDITION` | SNOMED edition to download (e.g., 'international', 'us') | 'international' | No |
-| `SNOMED_VERSION` | SNOMED version to download (e.g., '20230131') | latest | No |
-| `SNOMED_DATA_SOURCE` | Data source method ('mount', 'build_download', 'startup_download') | 'mount' | Yes |
-| `SNOMED_SLIM_MODE` | Enable slim database creation | 'false' | No |
-| `SNOMED_INCLUDE_RELATIONSHIPS` | Comma-separated list of relationship types to include | all | With slim mode |
-| `SNOMED_INCLUDE_HIERARCHIES` | Comma-separated list of parent concept IDs to include | all | With slim mode |
-| `NEO4J_AUTH` | Neo4j authentication credentials | neo4j/neo4j | No |
+| Variable                       | Description                                                        | Default         | Required             |
+| ------------------------------ | ------------------------------------------------------------------ | --------------- | -------------------- |
+| `SNOMED_API_KEY`               | SNOMED International API key                                       | -               | For download options |
+| `SNOMED_API_SECRET`            | SNOMED International API secret                                    | -               | For download options |
+| `SNOMED_EDITION`               | SNOMED edition to download (e.g., 'international', 'us')           | 'international' | No                   |
+| `SNOMED_VERSION`               | SNOMED version to download (e.g., '20230131')                      | latest          | No                   |
+| `SNOMED_DATA_SOURCE`           | Data source method ('mount', 'build_download', 'startup_download') | 'mount'         | Yes                  |
+| `SNOMED_SLIM_MODE`             | Enable slim database creation                                      | 'false'         | No                   |
+| `SNOMED_INCLUDE_RELATIONSHIPS` | Comma-separated list of relationship types to include              | all             | With slim mode       |
+| `SNOMED_INCLUDE_HIERARCHIES`   | Comma-separated list of parent concept IDs to include              | all             | With slim mode       |
+| `SNOMED_NEO4J_AUTH`            | Neo4j authentication credentials                                   | neo4j/neo4j     | No                   |
 
 ### Docker Run Examples
 
 **Using mounted SNOMED CT files:**
+
 ```bash
 docker run -d \
   -p 7474:7474 -p 7687:7687 \
   -v /path/to/snomed/files:/data/snomed \
   -e SNOMED_DATA_SOURCE=mount \
-  -e NEO4J_AUTH=neo4j/password \
+  -e SNOMED_NEO4J_AUTH=neo4j/password \
   snomed-neo4j
 ```
 
 **Downloading during startup:**
+
 ```bash
 docker run -d \
   -p 7474:7474 -p 7687:7687 \
@@ -61,11 +63,12 @@ docker run -d \
   -e SNOMED_API_KEY=your_api_key \
   -e SNOMED_API_SECRET=your_api_secret \
   -e SNOMED_EDITION=international \
-  -e NEO4J_AUTH=neo4j/password \
+  -e SNOMED_NEO4J_AUTH=neo4j/password \
   snomed-neo4j
 ```
 
 **Creating a slim database:**
+
 ```bash
 docker run -d \
   -p 7474:7474 -p 7687:7687 \
@@ -74,7 +77,7 @@ docker run -d \
   -e SNOMED_SLIM_MODE=true \
   -e SNOMED_INCLUDE_RELATIONSHIPS=116680003,363698007 \
   -e SNOMED_INCLUDE_HIERARCHIES=404684003,71388002 \
-  -e NEO4J_AUTH=neo4j/password \
+  -e SNOMED_NEO4J_AUTH=neo4j/password \
   snomed-neo4j
 ```
 
@@ -115,6 +118,7 @@ snomed-neo4j/
 ### Neo4j Configuration
 
 The Neo4j database is configured with:
+
 - Appropriate memory settings for SNOMED CT data
 - Indexes on commonly queried fields
 - Optimized cache settings for terminology queries
@@ -122,6 +126,7 @@ The Neo4j database is configured with:
 ### Python Client
 
 A Python client library is included to simplify interaction with the SNOMED CT Neo4j database:
+
 - Connection management
 - Common SNOMED CT queries
 - Utility functions for concept navigation and subsumption testing
