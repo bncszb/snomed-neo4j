@@ -22,3 +22,4 @@ package = true
 [project.scripts]
 download = "snomed_core.download:main"
 load = "snomed_core.loader:main"
+slim = "snomed_core.slim:main"

@@ -16,6 +16,7 @@ from neo4j import Driver, Session
 from neo4j.exceptions import Neo4jError
 
 from snomed_core.client import get_driver
+from snomed_core.utils import optional_env_int
 
 
 class SNOMEDSlimmer:
@@ -275,20 +276,15 @@ class SNOMEDSlimmer:
 
 
 def slim(
-    relationships: str | None = None,
-    hierarchies: str | None = None,
-    soft_delete: bool | None = None,
-    dry_run: bool | None = None,
-    batch_size: int = 1000,
-    max_depth: int = 20,
+    relationships: str,
+    hierarchies: str,
+    soft_delete: bool,
+    dry_run: bool,
+    batch_size: int,
+    max_depth: int,
 ) -> None:
     logger = logging.getLogger(__name__)
     logger.info("Starting SNOMED CT database slimming process")
-
-    relationships = relationships or os.environ["SNOMED_RELATIONSHIPS"]
-    hierarchies = hierarchies or os.environ["SNOMED_HIERARCHIES"]
-    soft_delete = soft_delete if isinstance(soft_delete, bool) else os.environ["SNOMED_SOFT_DELETE"].lower() in ["1", "true"]
-    dry_run = dry_run if isinstance(dry_run, bool) else os.environ["SNOMED_DRY_RUN"].lower() in ["1", "true"]
 
     if not hierarchies and not relationships:
         logger.warning("No slimming strategy given. Returning without change.")
@@ -337,3 +333,29 @@ def slim(
     except Exception as e:
         logger.error(f"Slimming process failed: {e}")
         sys.exit(1)
+
+
+def main() -> None:
+    from dotenv import load_dotenv
+
+    from snomed_core.logging import setup_logging
+    from snomed_core.utils import env_bool
+
+    load_dotenv()
+    setup_logging()
+
+    relationships = os.environ["SNOMED_SLIM_RELATIONSHIPS"]
+    hierarchies = os.environ["SNOMED_SLIM_HIERARCHIES"]
+    soft_delete = env_bool("SNOMED_SLIM_SOFT_DELETE")
+    dry_run = env_bool("SNOMED_SLIM_DRY_RUN")
+    batch_size = optional_env_int(os.environ["SNOMED_IMPORT_BATCH"]) or 1000
+    max_depth = optional_env_int(os.environ["SNOMED_SLIM_MAX_DEPTH"]) or 20
+
+    slim(
+        relationships,
+        hierarchies,
+        soft_delete,
+        dry_run,
+        batch_size,
+        max_depth,
+    )
