@@ -15,7 +15,7 @@ from typing import Any, LiteralString
 from neo4j import Driver, Session
 from neo4j.exceptions import Neo4jError
 
-from snomed_neo4j.client import get_driver
+from snomed_core.client import get_driver
 
 
 class SNOMEDSlimmer:

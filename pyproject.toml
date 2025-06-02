@@ -31,3 +31,13 @@ extend-select = ["ANN"]
 ignore = ["E203", "E501"]
 
 [tool.ruff.format]
+
+[tool.uv.workspace]
+members = [
+    "packages/snomed-core",
+    "packages/snomed-client",
+    "packages/snomed-langchain",
+]
+
+[tool.uv.sources]
+snomed_core = { workspace = true }
