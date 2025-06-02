@@ -38,7 +38,7 @@ def download_snomed_with_api_key(api_key: str, file_url: str, output_dir: Path) 
 
 def download(api_key: str | None = None, output_dir: Path | None = None) -> None:
     api_key = api_key or os.environ["SNOMED_API_KEY"]
-    output_dir = output_dir or Path(os.environ["SNOMED_OUTPUT_DIR"])
+    output_dir = output_dir or Path(os.environ["SNOMED_DIR"])
 
     output_dir.mkdir(parents=True, exist_ok=True)
 

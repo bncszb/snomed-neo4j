@@ -3,29 +3,22 @@
 Script to load SNOMED CT RF2 files into Neo4j.
 """
 
-import argparse
 import csv
+import os
 import sys
 import time
 from pathlib import Path
 
-from neo4j import GraphDatabase, Session
+from neo4j import Session
 from tqdm import tqdm
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Load SNOMED CT data into Neo4j")
-    parser.add_argument("--data-dir", required=True, help="Directory containing SNOMED CT RF2 files")
-    parser.add_argument("--neo4j-uri", default="bolt://localhost:7687", help="Neo4j URI")
-    parser.add_argument("--neo4j-user", default="neo4j", help="Neo4j username")
-    parser.add_argument("--neo4j-password", default="neo4jneo4j", help="Neo4j password")
-    parser.add_argument("--batch-size", type=int, default=10000, help="Batch size for loading")
-    parser.add_argument("--keep-inactive")
-    return parser.parse_args()
+from snomed_core.client import get_driver
+from snomed_core.utils import env_bool
 
 
 def find_rf2_files(data_dir: Path) -> dict:
     """Find RF2 files in the data directory."""
+    print(os.getcwd())
     data_path = Path(data_dir)
 
     snapshot_dirs = list(data_path.glob("**/Snapshot"))
@@ -331,20 +324,22 @@ CALL apoc.periodic.iterate(
 
 
 def main() -> None:
-    args = parse_args()
+    from dotenv import load_dotenv
 
-    rf2_files = find_rf2_files(args.data_dir)
+    load_dotenv()
 
-    driver = GraphDatabase.driver(args.neo4j_uri, auth=(args.neo4j_user, args.neo4j_password))
+    rf2_files = find_rf2_files(Path(os.environ["SNOMED_DIR"]))
+
+    driver = get_driver()
 
     start_time = time.time()
 
     with driver.session() as session:
         setup_neo4j_schema(session)
 
-        load_concepts(session, rf2_files["concept"], args.batch_size, args.keep_inactive)
-        load_descriptions(session, rf2_files["description"], args.batch_size, args.keep_inactive)
-        load_relationships(session, rf2_files["relationship"], args.batch_size, args.keep_inactive)
+        load_concepts(session, rf2_files["concept"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
+        load_descriptions(session, rf2_files["description"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
+        load_relationships(session, rf2_files["relationship"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
 
         create_is_a_relationships(session)
 
@@ -352,7 +347,3 @@ def main() -> None:
     print(f"Data loading completed in {end_time - start_time:.2f} seconds.")
 
     driver.close()
-
-
-if __name__ == "__main__":
-    main()
