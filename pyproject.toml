@@ -4,9 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = [
-
-]
+dependencies = []
 
 [dependency-groups]
 dev = ["ruff>=0.11.12", "pytest>=7.4.0", "pytest-mock>=3.11.1"]
@@ -22,10 +20,28 @@ python_functions = "test_*"
 line-length = 150
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "B", "UP"]
-extend-select = ["ANN"]
-
-ignore = ["E203", "E501"]
+select = [
+    "E",
+    "F",
+    "W",
+    "I",
+    "N",
+    "B",
+    "UP",
+    "F401",
+    "RUF022",
+    "C4",
+    "FA",
+    "PIE",
+    "Q",
+    "RSE",
+    "RET",
+    "SIM",
+    "SLOT",
+    "PERF",
+    "ANN",
+]
+ignore = ["E203", "E501", "ANN003"]
 
 [tool.ruff.format]
 

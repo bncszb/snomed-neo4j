@@ -39,7 +39,7 @@ EffectiveTimeField = Annotated[
 
 ActiveField = Annotated[
     bool | str | None,
-    BeforeValidator(lambda v: v == "1"),
+    BeforeValidator(lambda v: v if isinstance(v, bool) else v.lower() in ("true", "1")),
 ]
 
 
@@ -100,7 +100,7 @@ class Concept(BaseModel):
     """SNOMED CT Concept model"""
 
     id: str = Field(..., description="Concept identifier (SCTID)")
-    effective_time: EffectiveTimeField = Field(None, description="Effective time of the concept", alias="effectiveTime")
+    effective_time: EffectiveTimeField = Field(..., description="Effective time of the concept", alias="effectiveTime")
     active: ActiveField = Field(True, description="Whether the concept is active")
     module_id: str = Field(..., description="Module identifier", alias="moduleId")
     definition_status_id: str = Field(..., description="Definition status", alias="definitionStatusId")
@@ -232,6 +232,11 @@ class ConceptWithDetails(Concept):
     def is_a_relationships(self) -> list[Relationship]:
         """Get IS-A relationships (116680003)"""
         return [rel for rel in self.relationships if rel.active and rel.type_id == "116680003"]
+
+    @classmethod
+    def from_concept(cls, concept: Concept, **kwargs) -> "ConceptWithDetails":
+        """Create ConceptWithDetails from a basic Concept"""
+        return cls(**kwargs, **concept.model_dump(by_alias=True))
 
 
 # Example usage and helper functions
