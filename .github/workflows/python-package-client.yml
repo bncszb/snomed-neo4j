@@ -40,5 +40,5 @@ jobs:
         run: |
           cd packages/snomed-neo4j-core
           uv run -m build
-          twine check dist/*
-          twine upload dist/*
+          uv run -m twine check dist/*
+          uv run -m twine upload dist/*
