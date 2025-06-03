@@ -30,6 +30,9 @@ jobs:
       # - name: Run tests
       #   # For example, using `pytest`
       #   run: uv run pytest tests
+      - name: Install dependencies
+        run: |
+          uv pip install build twine
       - name: Build and publish
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
