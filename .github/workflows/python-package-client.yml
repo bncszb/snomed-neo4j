@@ -42,3 +42,8 @@ jobs:
           uv run -m build
           uv run -m twine check dist/*
           uv run -m twine upload dist/*
+
+          cd packages/snomed-neo4j-client
+          uv run -m build
+          uv run -m twine check dist/*
+          uv run -m twine upload dist/*
