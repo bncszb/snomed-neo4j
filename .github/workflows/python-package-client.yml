@@ -33,7 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv pip install build twine
-      - name: Build and publish
+      - name: Build and publish Core
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
@@ -42,8 +42,15 @@ jobs:
           uv run -m build
           uv run -m twine check dist/*
           uv run -m twine upload dist/*
+          cd ../..
 
+      - name: Build and publish Client
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+        run: |
           cd packages/snomed-neo4j-client
           uv run -m build
           uv run -m twine check dist/*
           uv run -m twine upload dist/*
+          cd ../..
