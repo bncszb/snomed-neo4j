@@ -14,10 +14,11 @@ from neo4j import Session
 from tqdm import tqdm
 
 from snomed_core.client import get_driver
+from snomed_core.models import Concept, Description, Relationship
 from snomed_core.utils import env_bool
 
 
-def find_rf2_files(data_dir: Path) -> dict:
+def find_rf2_files(data_dir: Path) -> dict[str, Path]:
     """Find RF2 files in the data directory."""
     data_path = Path(data_dir)
 
@@ -36,7 +37,7 @@ def find_rf2_files(data_dir: Path) -> dict:
         logging.error("Could not find all required RF2 files.")
         sys.exit(1)
 
-    return {"concept": str(concept_file[0]), "description": str(description_file[0]), "relationship": str(relationship_file[0])}
+    return {"concept": concept_file[0], "description": description_file[0], "relationship": relationship_file[0]}
 
 
 def setup_neo4j_schema(session: Session) -> None:
@@ -80,11 +81,10 @@ def load_concepts(session: Session, concept_file: Path, batch_size: int, keep_in
     """Load concepts from RF2 file into Neo4j."""
     print("Loading concepts...")
 
-    # Count lines for progress bar
     with open(concept_file, encoding="utf-8") as f:
         total_lines = sum(1 for _ in f) - 1  # Subtract header
 
-    batch = []
+    batch: list[Concept] = []
     loaded = 0
 
     with open(concept_file, encoding="utf-8") as f:
@@ -92,50 +92,41 @@ def load_concepts(session: Session, concept_file: Path, batch_size: int, keep_in
 
         with tqdm(total=total_lines) as pbar:
             for row in reader:
-                # Convert active to boolean
                 active = row["active"] == "1"
 
                 if not active and not keep_inactive:
                     pbar.update(1)
                     continue
 
-                # Add to batch
-                batch.append({"id": row["id"], "active": active, "moduleId": row["moduleId"], "definitionStatusId": row["definitionStatusId"]})
+                batch.append(Concept(**row))
 
-                # Process batch if full
                 if len(batch) >= batch_size:
+                    batch_dicts = [{"properties": c.model_dump(by_alias=True)} for c in batch]
                     session.run(
                         """
                         UNWIND $batch AS row
-                        CREATE (c:Concept {
-                            id: row.id,
-                            active: row.active,
-                            moduleId: row.moduleId,
-                            definitionStatusId: row.definitionStatusId
-                        })
-                    """,
-                        {"batch": batch},
+                        CREATE (c:Concept)
+                        SET c = row.properties
+                        RETURN count(c) as created_count
+                        """,
+                        {"batch": batch_dicts},
                     )
 
                     loaded += len(batch)
                     pbar.update(len(batch))
                     batch = []
 
-            # Process remaining batch
             if batch:
+                batch_dicts = [{"properties": c.model_dump(by_alias=True)} for c in batch]
                 session.run(
                     """
                     UNWIND $batch AS row
-                    CREATE (c:Concept {
-                        id: row.id,
-                        active: row.active,
-                        moduleId: row.moduleId,
-                        definitionStatusId: row.definitionStatusId
-                    })
-                """,
-                    {"batch": batch},
+                    CREATE (c:Concept)
+                    SET c = row.properties
+                    RETURN count(c) as created_count
+                    """,
+                    {"batch": batch_dicts},
                 )
-
                 loaded += len(batch)
                 pbar.update(len(batch))
 
@@ -152,7 +143,7 @@ def load_descriptions(session: Session, description_file: Path, batch_size: int,
     with open(description_file, encoding="utf-8") as f:
         total_lines = sum(1 for _ in f) - 1  # Subtract header
 
-    batch = []
+    batch: list[Description] = []
     loaded = 0
 
     with open(description_file, encoding="utf-8") as f:
@@ -160,63 +151,44 @@ def load_descriptions(session: Session, description_file: Path, batch_size: int,
 
         with tqdm(total=total_lines) as pbar:
             for row in reader:
-                # Convert active to boolean
                 active = row["active"] == "1"
 
                 if not active and not keep_inactive:
                     pbar.update(1)
                     continue
 
-                # Add to batch
-                batch.append(
-                    {
-                        "id": row["id"],
-                        "conceptId": row["conceptId"],
-                        "active": active,
-                        "term": row["term"],
-                        "typeId": row["typeId"],
-                        "languageCode": row["languageCode"],
-                    }
-                )
+                batch.append(Description(**row))
 
-                # Process batch if full
                 if len(batch) >= batch_size:
+                    batch_dicts = [{"concept_id": d.concept_id, "properties": d.model_dump(by_alias=True)} for d in batch]
+
                     session.run(
                         """
                         UNWIND $batch AS row
-                        MATCH (c:Concept {id: row.conceptId})
-                        CREATE (d:Description {
-                            id: row.id,
-                            active: row.active,
-                            term: row.term,
-                            typeId: row.typeId,
-                            languageCode: row.languageCode
-                        })
+                        MATCH (c:Concept {id: row.concept_id})
+                        CREATE (d:Description)
+                        SET d = row.properties
                         CREATE (c)-[:HAS_DESCRIPTION]->(d)
-                    """,
-                        {"batch": batch},
+                        """,
+                        {"batch": batch_dicts},
                     )
 
                     loaded += len(batch)
                     pbar.update(len(batch))
                     batch = []
 
-            # Process remaining batch
             if batch:
+                batch_dicts = [{"concept_id": d.concept_id, "properties": d.model_dump(by_alias=True)} for d in batch]
+
                 session.run(
                     """
                     UNWIND $batch AS row
-                    MATCH (c:Concept {id: row.conceptId})
-                    CREATE (d:Description {
-                        id: row.id,
-                        active: row.active,
-                        term: row.term,
-                        typeId: row.typeId,
-                        languageCode: row.languageCode
-                    })
+                    MATCH (c:Concept {id: row.concept_id})
+                    CREATE (d:Description)
+                    SET d = row.properties
                     CREATE (c)-[:HAS_DESCRIPTION]->(d)
-                """,
-                    {"batch": batch},
+                    """,
+                    {"batch": batch_dicts},
                 )
 
                 loaded += len(batch)
@@ -233,7 +205,7 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
     with open(relationship_file, encoding="utf-8") as f:
         total_lines = sum(1 for _ in f) - 1  # Subtract header
 
-    batch = []
+    batch: list[Relationship] = []
     loaded = 0
 
     with open(relationship_file, encoding="utf-8") as f:
@@ -244,59 +216,42 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
                 # Convert active to boolean
                 active = row["active"] == "1"
 
-                # Skip inactive relationships
                 if not active and not keep_inactive:
                     pbar.update(1)
                     continue
 
-                # Add to batch
-                batch.append(
-                    {
-                        "id": row["id"],
-                        "sourceId": row["sourceId"],
-                        "destinationId": row["destinationId"],
-                        "typeId": row["typeId"],
-                        "characteristicTypeId": row["characteristicTypeId"],
-                        "modifierId": row["modifierId"],
-                    }
-                )
+                batch.append(Relationship(**row))
 
-                # Process batch if full
                 if len(batch) >= batch_size:
+                    batch_dicts = [{"source_id": r.source_id, "destination_id": r.destination_id, "properties": r.model_dump(by_alias=True)} for r in batch]
+
                     session.run(
                         """
                         UNWIND $batch AS row
-                        MATCH (source:Concept {id: row.sourceId})
-                        MATCH (destination:Concept {id: row.destinationId})
-                        CREATE (source)-[:RELATIONSHIP {
-                            id: row.id,
-                            typeId: row.typeId,
-                            characteristicTypeId: row.characteristicTypeId,
-                            modifierId: row.modifierId
-                        }]->(destination)
-                    """,
-                        {"batch": batch},
+                        MATCH (source:Concept {id: row.source_id})
+                        MATCH (destination:Concept {id: row.destination_id})
+                        CREATE (source)-[rel:RELATIONSHIP]->(destination)
+                        SET rel = row.properties
+                        """,
+                        {"batch": batch_dicts},
                     )
 
                     loaded += len(batch)
                     pbar.update(len(batch))
                     batch = []
 
-            # Process remaining batch
             if batch:
+                batch_dicts = [{"source_id": r.source_id, "destination_id": r.destination_id, "properties": r.model_dump(by_alias=True)} for r in batch]
+
                 session.run(
                     """
                     UNWIND $batch AS row
-                    MATCH (source:Concept {id: row.sourceId})
-                    MATCH (destination:Concept {id: row.destinationId})
-                    CREATE (source)-[:RELATIONSHIP {
-                        id: row.id,
-                        typeId: row.typeId,
-                        characteristicTypeId: row.characteristicTypeId,
-                        modifierId: row.modifierId
-                    }]->(destination)
-                """,
-                    {"batch": batch},
+                    MATCH (source:Concept {id: row.source_id})
+                    MATCH (destination:Concept {id: row.destination_id})
+                    CREATE (source)-[rel:RELATIONSHIP]->(destination)
+                    SET rel = row.properties
+                    """,
+                    {"batch": batch_dicts},
                 )
 
                 loaded += len(batch)
