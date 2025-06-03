@@ -13,7 +13,7 @@ jobs:
   uv-example:
     name: python
     runs-on: ubuntu-latest
-
+    environment: pypi
     steps:
       - uses: actions/checkout@v4
 
