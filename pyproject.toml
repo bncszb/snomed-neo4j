@@ -1,5 +1,5 @@
 [project]
-name = "snomed-ct-neo4j"
+name = "snomed-neo4j"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -47,10 +47,10 @@ ignore = ["E203", "E501", "ANN003"]
 
 [tool.uv.workspace]
 members = [
-    "packages/snomed-core",
-    "packages/snomed-client",
-    "packages/snomed-langchain",
+    "packages/snomed-neo4j-core",
+    "packages/snomed-neo4j-client",
+    "packages/snomed-neo4j-langchain",
 ]
 
 [tool.uv.sources]
-snomed_core = { workspace = true }
+snomed_neo4j_core = { workspace = true }

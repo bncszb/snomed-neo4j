@@ -1,8 +1,11 @@
-# %%
+"""
+SNOMED CT Neo4j Client
 
+A Python client for interacting with SNOMED CT data stored in a Neo4j database.
+"""
 
 from neo4j import GraphDatabase
-from snomed_core.models import Concept, ConceptWithDetails, Description, DescriptionTypeEnum, Relationship
+from snomed_neo4j_core.models import Concept, ConceptWithDetails, Description, DescriptionTypeEnum, Relationship
 
 
 class SnomedClient:
@@ -251,40 +254,19 @@ class SnomedClient:
             return [Relationship(**record["relationship"]) for record in result]
 
 
-# Example usage
-# %%
+if __name__ == "__main__":
+    # Example usage
+    concept_id = "138875005"  # SNOMED CT root concept
 
-concept_id = "1093006"  # Replace with a valid concept ID
-# concept_id = "559008"  # Replace with a valid concept ID
+    client = SnomedClient("bolt://localhost:7687", "neo4j", "password")
+    try:
+        concept = client.get_concept(concept_id)
+        print(f"Concept:\n{concept}\n")
 
-client = SnomedClient("bolt://localhost:7687", "neo4j", "neo4jneo4j")
-concept = client.get_concept(concept_id)
-print(f"Concept:\n{concept}\n\n")
+        preferred_term = client.get_preferred_term(concept_id)
+        print(f"Preferred term: {preferred_term}\n")
 
-concept_with_details = client.get_concept_with_details(concept_id)
-print(f"Concept with details:\n{concept_with_details}\n\n")
-
-preferred_term = client.get_preferred_term(concept_id)
-print(f"Preferred term: {preferred_term}\n\n")
-
-children = client.get_children(concept_id)
-print(f"Children: {children}\n\n")
-
-parents = client.get_parents(concept_id)
-print(f"Parents: {parents}\n\n")
-
-ancestors = client.get_ancestors(concept_id)
-print(f"Ancestors: {ancestors}\n\n")
-
-descendants = client.get_descendants(concept_id)
-print(f"Descendants: {descendants}\n\n")
-
-
-# %%
-concept_with_details.relationships
-
-
-# %%
-concept_with_details.parent_relationships
-
-# %%
+        children = client.get_children(concept_id)
+        print(f"Children count: {len(children)}\n")
+    finally:
+        client.close()

@@ -14,9 +14,8 @@ from typing import Any, LiteralString
 
 from neo4j import Driver, Session
 from neo4j.exceptions import Neo4jError
-
-from snomed_core.client import get_driver
-from snomed_core.utils import optional_env_int
+from snomed_neo4j_core.client import get_driver
+from snomed_neo4j_core.utils import optional_env_int
 
 
 class SNOMEDSlimmer:
@@ -337,9 +336,8 @@ def slim(
 
 def main() -> None:
     from dotenv import load_dotenv
-
-    from snomed_core.logging import setup_logging
-    from snomed_core.utils import env_bool
+    from snomed_neo4j_core.logging import setup_logging
+    from snomed_neo4j_core.utils import env_bool
 
     load_dotenv()
     setup_logging()

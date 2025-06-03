@@ -11,11 +11,10 @@ import time
 from pathlib import Path
 
 from neo4j import Session
+from snomed_neo4j_core.client import get_driver
+from snomed_neo4j_core.models import Concept, Description, Relationship
+from snomed_neo4j_core.utils import env_bool
 from tqdm import tqdm
-
-from snomed_core.client import get_driver
-from snomed_core.models import Concept, Description, Relationship
-from snomed_core.utils import env_bool
 
 
 def find_rf2_files(data_dir: Path) -> dict[str, Path]:
@@ -223,7 +222,9 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
                 batch.append(Relationship(**row))
 
                 if len(batch) >= batch_size:
-                    batch_dicts = [{"source_id": r.source_id, "destination_id": r.destination_id, "properties": r.model_dump(by_alias=True)} for r in batch]
+                    batch_dicts = [
+                        {"source_id": r.source_id, "destination_id": r.destination_id, "properties": r.model_dump(by_alias=True)} for r in batch
+                    ]
 
                     session.run(
                         """
@@ -241,7 +242,9 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
                     batch = []
 
             if batch:
-                batch_dicts = [{"source_id": r.source_id, "destination_id": r.destination_id, "properties": r.model_dump(by_alias=True)} for r in batch]
+                batch_dicts = [
+                    {"source_id": r.source_id, "destination_id": r.destination_id, "properties": r.model_dump(by_alias=True)} for r in batch
+                ]
 
                 session.run(
                     """

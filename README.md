@@ -100,7 +100,7 @@ snomed-neo4j/
 │   └── neo4j.conf
 └── client/
     ├── __init__.py
-    └── snomed_client.py
+    └── snomed_neo4j_client.py
 ```
 
 ## Technical Details

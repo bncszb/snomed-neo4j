@@ -1,17 +1,12 @@
 [project]
-name = "snomed-client"
+name = "snomed-neo4j-langchain"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "Bence Szabó", email = "bszabo96@gmail.com" }]
 requires-python = ">=3.12"
-dependencies = ['snomed_core']
+dependencies = []
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[dependency-groups]
-dev = [
-    "jupyter>=1.1.1",
-]

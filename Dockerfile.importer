@@ -27,4 +27,4 @@ ENV SNOMED_SLIM_MODE=false \
     SNOMED_EDITION=international
 
 # Set entrypoint
-ENTRYPOINT ["uv", "run", "packages/snomed-core/scripts/snomed_importer.py"]
+ENTRYPOINT ["uv", "run", "packages/snomed-neo4j-core/scripts/snomed_importer.py"]

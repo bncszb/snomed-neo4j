@@ -13,11 +13,11 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
-from snomed_core.client import get_driver, get_neo4j_http_uri
-from snomed_core.download import main as download_main
-from snomed_core.loader import main as load_main
-from snomed_core.logging import setup_logging
-from snomed_core.slim import main as slim_main
+from snomed_neo4j_core.client import get_driver, get_neo4j_http_uri
+from snomed_neo4j_core.download import main as download_main
+from snomed_neo4j_core.loader import main as load_main
+from snomed_neo4j_core.logging import setup_logging
+from snomed_neo4j_core.slim import main as slim_main
 
 load_dotenv()
 setup_logging()

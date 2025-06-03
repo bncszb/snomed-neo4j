@@ -87,7 +87,7 @@ RUN echo "Starting Neo4j and loading SNOMED data" && \
     exit 1; \
     fi && \
     echo "Neo4j is ready, running importer..." && \
-    uv run packages/snomed-core/scripts/snomed_importer.py && \
+    uv run packages/snomed-neo4j-core/scripts/snomed_importer.py && \
     echo "Import completed, stopping Neo4j..." && \
     neo4j stop && \
     wait $NEO4J_PID && \

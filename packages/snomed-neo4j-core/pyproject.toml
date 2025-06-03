@@ -1,5 +1,5 @@
 [project]
-name = "snomed-core"
+name = "snomed-neo4j-core"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -21,6 +21,6 @@ build-backend = "hatchling.build"
 package = true
 
 [project.scripts]
-download = "snomed_core.download:main"
-load = "snomed_core.loader:main"
-slim = "snomed_core.slim:main"
+download = "snomed_neo4j_core.download:main"
+load = "snomed_neo4j_core.loader:main"
+slim = "snomed_neo4j_core.slim:main"

@@ -1,0 +1,34 @@
+[project]
+name = "snomed-neo4j-client"
+version = "0.1.0"
+description = "A client library for interacting with SNOMED CT data in Neo4j"
+readme = "README.md"
+authors = [{ name = "Bence Szabó", email = "bszabo96@gmail.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Healthcare Industry",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+requires-python = ">=3.9"
+dependencies = ["snomed-neo4j-core>=0.1.0"]
+
+[project.urls]
+"Homepage" = "https://github.com/bncszb/snomed-ct-neo4j"
+"Bug Tracker" = "https://github.com/bncszb/snomed-ct-neo4j/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/snomed_neo4j_client"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/snomed_neo4j_client", "README.md", "LICENSE"]
+
+[dependency-groups]
+dev = ["jupyter>=1.1.1", "build>=1.0.3", "twine>=4.0.2"]
