@@ -20,9 +20,12 @@ from snomed_neo4j_core.utils import env_bool
 
 def find_rf2_files(data_dir: Path) -> dict[str, Path]:
     """Find RF2 files in the data directory."""
-    data_path = Path(data_dir)
 
+    logging.info(f"Searching for RF2 files in: {data_dir}")
+
+    data_path = Path(data_dir)
     snapshot_dirs = list(data_path.glob("**/Snapshot"))
+
     if not snapshot_dirs:
         logging.error(f"Could not find Snapshot directory in the provided data path: {data_dir}")
         sys.exit(1)
@@ -79,7 +82,7 @@ def setup_neo4j_schema(session: Session) -> None:
 
 def load_concepts(session: Session, concept_file: Path, batch_size: int, keep_inactive: bool = False) -> None:
     """Load concepts from RF2 file into Neo4j."""
-    print("Loading concepts...")
+    logging.info("Loading concepts...")
 
     with open(concept_file, encoding="utf-8") as f:
         total_lines = sum(1 for _ in f) - 1  # Subtract header
@@ -276,42 +279,39 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
     print(f"Loaded {loaded} relationships.")
 
 
-def create_is_a_relationships(session: Session) -> None:
-    """Create IS_A relationships for better querying."""
-    print("Creating IS_A relationships...")
+def add_fsn_to_concepts(session: Session) -> None:
+    """Add FSN to concepts based on descriptions."""
+    print("Adding FSN to concepts...")
 
-    # The IS_A relationship type ID in SNOMED CT is 116680003
     session.run("""
-CALL apoc.periodic.iterate(
-  "MATCH (source)-[r:RELATIONSHIP {typeId: '116680003'}]->(destination) RETURN source, destination, r",
-  "WITH source, destination, r
-   CREATE (source)-[new:IS_A]->(destination)
-   RETURN count(*)",
-  {batchSize: 1000, parallel: false}
-)
-    """)
-
-    print("IS_A relationships created.")
+        CALL apoc.periodic.iterate(
+        "MATCH (c:Concept)--(d:Description{typeId:'900000000000003001'})
+        RETURN c, d",
+        "WITH c, d
+        ORDER BY d.term
+        WITH c, collect(d)[0] as firstDescription
+        SET c.term = firstDescription.term
+        RETURN c",
+        {batchSize: 1000, parallel: false}
+        """)
 
 
 def main() -> None:
     from dotenv import load_dotenv
 
     load_dotenv()
-    print("=============1======================================")
     rf2_files = find_rf2_files(Path(os.environ["SNOMED_DIR"]))
-    print("==============2=====================================")
     driver = get_driver()
 
     start_time = time.time()
-    print("=============3======================================")
     with driver.session() as session:
-        print("=========4==========================================")
         setup_neo4j_schema(session)
-        print("=========5==========================================")
         load_concepts(session, rf2_files["concept"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
         load_descriptions(session, rf2_files["description"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
         load_relationships(session, rf2_files["relationship"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
+
+        if env_bool("SNOMED_ADD_FSN"):
+            add_fsn_to_concepts(session)
 
     end_time = time.time()
     print(f"Data loading completed in {end_time - start_time:.2f} seconds.")
