@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 from pathlib import Path
@@ -8,6 +9,8 @@ import requests
 def get_download_url() -> str:
     """Get release information for the specified edition and version."""
     api_url = "https://uts-ws.nlm.nih.gov/releases?releaseType=snomed-ct-international-edition&current=true"
+
+    logging.info("Getting download url")
 
     response = requests.get(api_url)
     if response.status_code != 200:
@@ -26,14 +29,15 @@ def download_snomed_with_api_key(api_key: str, file_url: str, output_dir: Path) 
     output_path = os.path.join(output_dir, os.path.basename(file_url))
     download_url = f"https://uts-ws.nlm.nih.gov/download?url={file_url}&apiKey={api_key}"
     try:
+        logging.info(f"Downloading {file_url}")
         with requests.get(download_url, stream=True) as r:
             r.raise_for_status()
             with open(output_path, "wb") as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)
-        print(f"Downloaded to {output_path}")
+        logging.info(f"Download complete, saved to {output_path}")
     except Exception as e:
-        print(f"Failed to download: {e}")
+        logging.error(f"Failed to download: {e}")
 
 
 def download(api_key: str | None = None, output_dir: Path | None = None) -> None:
