@@ -45,7 +45,7 @@ def find_rf2_files(data_dir: Path) -> dict[str, Path]:
 
 def setup_neo4j_schema(session: Session) -> None:
     """Set up Neo4j schema with indexes and constraints."""
-    print("Setting up Neo4j schema...")
+    logging.info("Setting up Neo4j schema...")
 
     # Create constraints
     session.run("""
@@ -133,12 +133,12 @@ def load_concepts(session: Session, concept_file: Path, batch_size: int, keep_in
                 loaded += len(batch)
                 pbar.update(len(batch))
 
-    print(f"Loaded {loaded} concepts.")
+    logging.info(f"Loaded {loaded} concepts.")
 
 
 def load_descriptions(session: Session, description_file: Path, batch_size: int, keep_inactive: bool = False) -> None:
     """Load descriptions from RF2 file into Neo4j."""
-    print("Loading descriptions...")
+    logging.info("Loading descriptions...")
 
     csv.field_size_limit(sys.maxsize)
 
@@ -197,12 +197,12 @@ def load_descriptions(session: Session, description_file: Path, batch_size: int,
                 loaded += len(batch)
                 pbar.update(len(batch))
 
-    print(f"Loaded {loaded} descriptions.")
+    logging.info(f"Loaded {loaded} descriptions.")
 
 
 def load_relationships(session: Session, relationship_file: Path, batch_size: int, keep_inactive: bool = False) -> None:
     """Load relationships from RF2 file into Neo4j."""
-    print("Loading relationships...")
+    logging.info("Loading relationships...")
 
     # Count lines for progress bar
     with open(relationship_file, encoding="utf-8") as f:
@@ -276,12 +276,12 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
                 loaded += len(batch)
                 pbar.update(len(batch))
 
-    print(f"Loaded {loaded} relationships.")
+    logging.info(f"Loaded {loaded} relationships.")
 
 
 def add_fsn_to_concepts(session: Session) -> None:
     """Add FSN to concepts based on descriptions."""
-    print("Adding FSN to concepts...")
+    logging.info("Adding FSN to concepts...")
 
     session.run("""
         CALL apoc.periodic.iterate(
@@ -314,6 +314,6 @@ def main() -> None:
             add_fsn_to_concepts(session)
 
     end_time = time.time()
-    print(f"Data loading completed in {end_time - start_time:.2f} seconds.")
+    logging.info(f"Data loading completed in {end_time - start_time:.2f} seconds.")
 
     driver.close()
