@@ -24,7 +24,8 @@ RUN mkdir -p /mnt/snomed
 
 # Environment variables
 ENV SNOMED_SLIM_MODE=false \
-    SNOMED_EDITION=international
+    SNOMED_EDITION=international \
+    SNOMED_DIR=/mnt/snomed
 
 # Set entrypoint
 ENTRYPOINT ["uv", "run", "packages/snomed-neo4j-core/scripts/snomed_importer.py"]

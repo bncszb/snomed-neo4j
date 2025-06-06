@@ -8,16 +8,16 @@ import logging
 import os
 import sys
 import time
-import zipfile
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 from snomed_neo4j_core.client import get_driver, get_neo4j_http_uri
-from snomed_neo4j_core.download import main as download_main
+from snomed_neo4j_core.download import download
 from snomed_neo4j_core.loader import main as load_main
 from snomed_neo4j_core.logging import setup_logging
 from snomed_neo4j_core.slim import main as slim_main
+from snomed_neo4j_core.utils import extract_zip_files
 
 load_dotenv()
 setup_logging()
@@ -68,55 +68,6 @@ def wait_for_neo4j() -> None:
     time.sleep(5)
 
 
-def extract_zip_files(data_dir: str) -> bool:
-    """Extract zip files in the given directory"""
-    data_path = Path(data_dir)
-    logging.info(f"Checking for zip files to extract in {data_dir}...")
-
-    # Find all zip files in the directory
-    zip_files = list(data_path.glob("*.zip"))
-
-    if not zip_files:
-        logging.info("No zip files found to extract.")
-        return True
-
-    # Extract each zip file
-    for zip_file in zip_files:
-        logging.info(f"Extracting: {zip_file.name}")
-
-        # Create extraction directory based on zip filename (without .zip extension)
-        extract_dir = zip_file.with_suffix("")
-
-        try:
-            with zipfile.ZipFile(zip_file, "r") as zip_ref:
-                # Create extraction directory if it doesn't exist
-                extract_dir.mkdir(exist_ok=True)
-                zip_ref.extractall(extract_dir)
-
-            logging.info(f"Successfully extracted: {zip_file.name}")
-
-            # Optionally remove the zip file after successful extraction
-            # Uncomment the next line if you want to delete zip files after extraction
-            # zip_file.unlink()
-
-        except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:
-            logging.info(f"ERROR: Failed to extract {zip_file.name}: {e}")
-            return False
-
-    logging.info("All zip files extracted successfully.")
-    return True
-
-
-def download_snomed_data() -> bool:
-    """Download SNOMED CT data"""
-    try:
-        download_main()
-        return True
-    except Exception as e:
-        logging.info(f"ERROR: Failed to download SNOMED data: {e}")
-        return False
-
-
 def load_snomed_data() -> bool:
     """Load SNOMED CT data into Neo4j"""
     try:
@@ -159,22 +110,12 @@ def main() -> None:
 
             # Check if SNOMED data exists in /mnt/snomed
             if not snomed_dir.exists() or not any(snomed_dir.iterdir()):
-                logging.info("No SNOMED data found in /mnt/snomed. Attempting download...")
-
-                if not download_snomed_data():
-                    logging.error("Failed to download SNOMED CT data.")
-                    sys.exit(1)
-
-                # Extract downloaded zip files
-                if not extract_zip_files("/mnt/snomed"):
-                    logging.error("Failed to extract SNOMED CT data.")
-                    sys.exit(1)
+                logging.info(f"No SNOMED data found in {snomed_dir}. Attempting download...")
+                download(output_dir=snomed_dir)
+                extract_zip_files("/mnt/snomed")
             else:
-                # Data directory exists but might contain zip files that need extraction
                 logging.info("SNOMED data directory exists. Checking for zip files to extract...")
-                if not extract_zip_files("/mnt/snomed"):
-                    logging.error("Failed to extract existing zip files.")
-                    sys.exit(1)
+                extract_zip_files("/mnt/snomed")
 
             # Load SNOMED CT data
             logging.info("Loading SNOMED CT data into Neo4j...")
