@@ -64,7 +64,7 @@ class SnomedClient:
         with self.driver.session() as session:
             rel_result = session.run(
                 """
-                MATCH (:Concept {id: $id})<-[r:RELATIONSHIP]-(:Concept)
+                MATCH (:Concept {id: $id})<-[r]-(:Concept)
                 WHERE (r.is_deleted IS NULL OR r.is_deleted = false)
                 RETURN properties(r) as relationship
                 """,
@@ -78,7 +78,7 @@ class SnomedClient:
         with self.driver.session() as session:
             parent_rel_result = session.run(
                 """
-                MATCH (:Concept)<-[r:RELATIONSHIP]-(:Concept {id: $id})
+                MATCH (:Concept)<-[r]-(:Concept {id: $id})
                 WHERE (r.is_deleted IS NULL OR r.is_deleted = false)
                 RETURN properties(r) as relationship
                 """,
@@ -211,7 +211,7 @@ class SnomedClient:
         with self.driver.session() as session:
             params = {"id": concept_id}
             query = """
-                MATCH (c:Concept {id: $id})-[r:RELATIONSHIP]->(target:Concept)
+                MATCH (c:Concept {id: $id})-[r]->(target:Concept)
                 WHERE (c.is_deleted IS NULL OR c.is_deleted = false)
                   AND (target.is_deleted IS NULL OR target.is_deleted = false)
                   AND (r.is_deleted IS NULL OR r.is_deleted = false)
@@ -235,7 +235,7 @@ class SnomedClient:
         with self.driver.session() as session:
             params = {"id": concept_id}
             query = """
-                MATCH (c:Concept {id: $id})-[r:RELATIONSHIP]->(target:Concept)
+                MATCH (c:Concept {id: $id})-[r]->(target:Concept)
                 WHERE (c.is_deleted IS NULL OR c.is_deleted = false)
                   AND (target.is_deleted IS NULL OR target.is_deleted = false)
                   AND (r.is_deleted IS NULL OR r.is_deleted = false)

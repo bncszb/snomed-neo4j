@@ -14,6 +14,7 @@ from typing import Any, LiteralString
 
 from neo4j import Driver, Session
 from neo4j.exceptions import Neo4jError
+
 from snomed_neo4j_core.client import get_driver
 from snomed_neo4j_core.utils import optional_env_int
 
@@ -94,7 +95,7 @@ class SNOMEDSlimmer:
 
         # Count relationships to be affected
         count_query = """
-            MATCH ()-[r:RELATIONSHIP]->()
+            MATCH (:Concept)-[r]->(:Concept)
             WHERE NOT r.typeId IN $types
             RETURN count(r) as count
         """
@@ -121,7 +122,7 @@ class SNOMEDSlimmer:
             result = session.run(
                 """
                 CALL apoc.periodic.iterate(
-                    "MATCH ()-[r:RELATIONSHIP]->() WHERE NOT r.typeId IN $types RETURN r",
+                    "MATCH (:Concept)-[r]->(:Concept) WHERE NOT r.typeId IN $types RETURN r",
                     $action_query,
                     {batchSize: $batch_size, parallel: false, retries: 3, params: {types: $types}}
                 )
@@ -269,7 +270,7 @@ class SNOMEDSlimmer:
         action_query = "SET c.is_deleted = false RETURN count(*)"
         self.execute_batched_operation(session, match_query, action_query)
 
-        match_query = "MATCH ()-[r:RELATIONSHIP]-() RETURN r"
+        match_query = "MATCH (:Concept)-[r]-(:Concept) RETURN r"
         action_query = "SET r.is_deleted = false RETURN count(*)"
         self.execute_batched_operation(session, match_query, action_query)
 
@@ -312,18 +313,17 @@ def slim(
     start_time = time.time()
 
     try:
-        with slimmer.get_driver() as driver:
-            with driver.session() as session:
-                if soft_delete:
-                    slimmer.reset_soft_deletions(session)
+        with slimmer.get_driver() as driver, driver.session() as session:
+            if soft_delete:
+                slimmer.reset_soft_deletions(session)
 
-                # Filter by relationship types if specified
-                if relationship_types:
-                    slimmer.filter_by_relationship_types(session, relationship_types, soft_delete, dry_run)
+            # Filter by relationship types if specified
+            if relationship_types:
+                slimmer.filter_by_relationship_types(session, relationship_types, soft_delete, dry_run)
 
-                # Filter by hierarchies if specified
-                if parent_ids:
-                    slimmer.filter_by_hierarchies(session, parent_ids, soft_delete, dry_run)
+            # Filter by hierarchies if specified
+            if parent_ids:
+                slimmer.filter_by_hierarchies(session, parent_ids, soft_delete, dry_run)
 
         end_time = time.time()
         duration = end_time - start_time
@@ -336,6 +336,7 @@ def slim(
 
 def main() -> None:
     from dotenv import load_dotenv
+
     from snomed_neo4j_core.logging import setup_logging
     from snomed_neo4j_core.utils import env_bool
 
