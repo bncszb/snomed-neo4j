@@ -1,6 +1,6 @@
 [project]
 name = "snomed-neo4j-client"
-version = "0.1.0"
+version = "0.1.1"
 description = "A client library for interacting with SNOMED CT data in Neo4j"
 readme = "README.md"
 authors = [{ name = "Bence Szabó", email = "bszabo96@gmail.com" }]

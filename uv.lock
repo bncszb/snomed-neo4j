@@ -1696,7 +1696,7 @@ dev = [
 
 [[package]]
 name = "snomed-neo4j-client"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/snomed-neo4j-client" }
 dependencies = [
     { name = "snomed-neo4j-core" },
@@ -1721,7 +1721,7 @@ dev = [
 
 [[package]]
 name = "snomed-neo4j-core"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/snomed-neo4j-core" }
 dependencies = [
     { name = "neo4j" },
