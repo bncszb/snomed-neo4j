@@ -11,10 +11,11 @@ import time
 from pathlib import Path
 
 from neo4j import Session
+from tqdm import tqdm
+
 from snomed_neo4j_core.client import get_driver
 from snomed_neo4j_core.models import Concept, Description, Relationship
 from snomed_neo4j_core.utils import env_bool
-from tqdm import tqdm
 
 
 def find_rf2_files(data_dir: Path) -> dict[str, Path]:
@@ -23,7 +24,7 @@ def find_rf2_files(data_dir: Path) -> dict[str, Path]:
 
     snapshot_dirs = list(data_path.glob("**/Snapshot"))
     if not snapshot_dirs:
-        logging.error("Could not find Snapshot directory in the provided data path.")
+        logging.error(f"Could not find Snapshot directory in the provided data path: {data_dir}")
         sys.exit(1)
 
     snapshot_dir = snapshot_dirs[0]
@@ -223,7 +224,13 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
 
                 if len(batch) >= batch_size:
                     batch_dicts = [
-                        {"source_id": r.source_id, "destination_id": r.destination_id, "properties": r.model_dump(by_alias=True)} for r in batch
+                        {
+                            "source_id": r.source_id,
+                            "destination_id": r.destination_id,
+                            "properties": r.model_dump(by_alias=True),
+                            "type": r.type.name,
+                        }
+                        for r in batch
                     ]
 
                     session.run(
@@ -231,8 +238,14 @@ def load_relationships(session: Session, relationship_file: Path, batch_size: in
                         UNWIND $batch AS row
                         MATCH (source:Concept {id: row.source_id})
                         MATCH (destination:Concept {id: row.destination_id})
-                        CREATE (source)-[rel:RELATIONSHIP]->(destination)
-                        SET rel = row.properties
+                        CALL apoc.create.relationship(
+                            source,
+                            row.type,
+                            row.properties,
+                            destination
+                        ) YIELD rel
+                        RETURN count(*) AS relationshipsCreated
+
                         """,
                         {"batch": batch_dicts},
                     )
@@ -299,8 +312,6 @@ def main() -> None:
         load_concepts(session, rf2_files["concept"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
         load_descriptions(session, rf2_files["description"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
         load_relationships(session, rf2_files["relationship"], int(os.environ["SNOMED_IMPORT_BATCH"]), env_bool("SNOMED_KEEP_INACTIVE"))
-
-        create_is_a_relationships(session)
 
     end_time = time.time()
     print(f"Data loading completed in {end_time - start_time:.2f} seconds.")

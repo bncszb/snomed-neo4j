@@ -58,6 +58,24 @@ class ModuleEnum(str, Enum):
     UK_EXTENSION = "999000041000000102"  # UK extension module
 
 
+class SnomedRelationshipType(Enum):
+    IS_A = "116680003"
+    HAS_INTENT = "363703001"
+    FINDING_SITE = "363698007"
+    INTERPRETS = "363714003"
+    CAUSATIVE_AGENT = "246075003"
+    LATERALITY = "272741003"
+    OCCURENCE = "246454002"
+    PROCEDURE_SITE = "363704007"
+    ASSOCIATED_MORPHOLOGY = "116676008"
+    SEVERITY = "246112005"
+    DUE_TO = "42752001"
+    METHOD = "260686004"
+    SPECIMEN = "116686009"
+    INTERPRETATION = "363713009"
+    OTHER = "other"
+
+
 class DefinitionStatusEnum(str, Enum):
     """Definition status for SNOMED CT concepts"""
 
@@ -199,6 +217,12 @@ class Relationship(BaseModel):
         if v < 0:
             raise ValueError("Relationship group must be non-negative")
         return v
+
+    @property
+    def type(self) -> SnomedRelationshipType:
+        if self.type_id in SnomedRelationshipType:
+            return SnomedRelationshipType(self.type_id)
+        return SnomedRelationshipType.OTHER
 
     model_config = ConfigDict(extra="ignore", json_encoders={datetime: lambda v: v.strftime("%Y%m%d")})
 
